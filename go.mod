@@ -1,4 +1,4 @@
-module github.com/PAKIWASI/work_steal_pool
+module github.com/PAKIWASI/workstealpool
 
 go 1.26.5
 
