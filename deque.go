@@ -10,7 +10,6 @@ package workstealpool
 //     from any number of goroutines, at any time.
 
 import (
-	"fmt"
 	"sync/atomic"
 )
 
@@ -233,29 +232,4 @@ func (d *LFdeque[T]) StealHalf() (v []T, ok bool) {
 	}
 
 	return buf, true
-}
-
-// Len [DEBUG] is an advisory size, safe to call from anywhere, but may be stale
-// the instant it returns since top/bottom can move concurrently.
-func (d *LFdeque[T]) Len() int64 {
-	b := d.bottom.Load()
-	t := d.top.Load()
-	if b < t {
-		return 0
-	}
-	return b - t
-}
-
-// Print [DEBUG] is for debugging only. It is NOT safe to call concurrently with
-// PushBottom/PopBottom/Steal from other goroutines. It takes an
-// unsynchronized snapshot of top/bottom/array.
-func (d *LFdeque[T]) Print() {
-	t := d.top.Load()
-	b := d.bottom.Load()
-	a := d.array.Load()
-	fmt.Print("[ ")
-	for i := t; i < b; i++ {
-		fmt.Printf("%v ", a.get(i))
-	}
-	fmt.Println("]")
 }
