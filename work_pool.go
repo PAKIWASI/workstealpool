@@ -88,7 +88,7 @@ func NewWorkerPool[T, R any](
 	ctx context.Context,
 	poolSize, initialWorkerCap, resultBuffSize int,
 	execute Task[T, R],
-) *WorkerPool[T, R] {
+) WorkerPool[T, R] {
 	// derive a cancellable context from the user's
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -97,7 +97,7 @@ func NewWorkerPool[T, R any](
 		workers[i] = newWorker[T](initialWorkerCap)
 	}
 
-	return &WorkerPool[T, R]{
+	return WorkerPool[T, R]{
 		workers: workers,
 		execute: execute,
 		wakeup:  make(chan struct{}, 1),
