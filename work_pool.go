@@ -56,7 +56,7 @@ type WorkerPool[T, R any] struct {
 	workers []Worker[T]
 	execute Task[T, R]
 
-	wakeup  chan struct{}
+	wakeup chan struct{}
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -100,7 +100,7 @@ func NewWorkerPool[T, R any](
 	return &WorkerPool[T, R]{
 		workers: workers,
 		execute: execute,
-		wakeup: make(chan struct{}, 1),
+		wakeup:  make(chan struct{}, 1),
 		ctx:     ctx,
 		cancel:  cancel,
 		results: make(chan R, resultBuffSize),
@@ -207,7 +207,6 @@ func (p *WorkerPool[T, R]) broadcastWakeup() {
 	default:
 	}
 }
-
 
 // runTask implements the actual task execution of a worker.
 func (p *WorkerPool[T, R]) runTask(idx int, item T) error {
