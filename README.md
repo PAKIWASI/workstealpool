@@ -94,6 +94,83 @@ Rules to keep in mind:
   Too fine and CAS/spawn overhead dominates; too coarse and there isn't
   enough work to steal.
 
+## User control over discovered work: recoverable vs. fatal errors
+
+`Task`'s `error` return is intentionally blunt: any non-nil error is
+treated as *the* failure, cancels every other worker, and is what
+`Wait()` returns. That's the right behavior for "the pool itself broke,"
+and the wrong behavior for "this one item didn't work out." Those are
+different situations and the pool only gives you a tool for the first
+one — the second is on you to build, using the result type.
+
+A directory walker is the clearest example. Walking a tree with
+`spawn(subdir)` per directory, you *will* hit `EACCES` on some
+subdirectory somewhere. Returning that from `Task` as `error` would
+cancel the entire walk over one unreadable folder, which is almost never
+what you want.
+
+Instead, fold expected, recoverable failures into `R` and keep returning
+`nil` for `error`:
+
+```go
+type WalkResult struct {
+    Path string
+    Info os.FileInfo // nil if Err != nil
+    Err  error        // non-nil = recoverable per-item failure
+}
+
+func walkTask(ctx context.Context, dir string, spawn func(string)) (*WalkResult, error) {
+    entries, err := os.ReadDir(dir)
+    if err != nil {
+        if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
+            // Expected: report it as a leaf result, don't abort the pool.
+            return &WalkResult{Path: dir, Err: err}, nil
+        }
+        // Unexpected (corrupted mount, unusual I/O failure, ...): abort.
+        return nil, err
+    }
+
+    for _, e := range entries {
+        spawn(filepath.Join(dir, e.Name()))
+    }
+    return nil, nil
+}
+```
+
+The consumer sorts results after draining `Run()`, the same way
+`CountPrimesParallel` sums leaf counts:
+
+```go
+for r := range pool.Run() {
+    if r.Err != nil {
+        denied = append(denied, r) // collect, log, retry later — your call
+        continue
+    }
+    files = append(files, r)
+}
+```
+
+Guidelines this generalizes to:
+
+- **Use `errors.Is`/sentinel checks inside the `Task` to classify an
+  error**, not the pool. `WorkerPool` doesn't know or care what
+  `fs.ErrPermission` is — keeping that judgment call in your `Task`
+  keeps the scheduler generic instead of leaking walker-specific
+  semantics into it.
+- **Recoverable failures are data, not control flow.** They travel out
+  through `return &result, nil`, same as any other leaf value, because
+  results are the only per-item channel out of the pool.
+- **Reserve `return nil, err` for the true first case**: something the
+  running `Task` can't classify or recover from, where continuing to
+  process other items isn't safe or meaningful (out of file descriptors,
+  a bug, a context you should have checked but didn't). That's the one
+  bucket the pool will actually abort everything for.
+- **A zero-value `R` isn't the same as an error.** If `R` is a plain
+  struct like `WalkResult` above, callers should check `Err` first, not
+  infer failure from a nil/zero field — nothing in the pool enforces
+  that convention for you, it's a discipline you're opting into on the
+  result type.
+
 ## What this is useful for
 
 This pool is built for one specific shape of problem: recursive
