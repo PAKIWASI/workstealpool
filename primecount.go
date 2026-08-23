@@ -1,4 +1,4 @@
-package worksteal
+package workstealpool
 
 // primecount.go
 //

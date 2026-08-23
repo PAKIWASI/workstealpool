@@ -1,4 +1,4 @@
-package worksteal
+package workstealpool
 
 // deque.go
 // A lock-free, growable, array-based work-stealing deque, following the Chase-Lev algorithm as refined by

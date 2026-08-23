@@ -1,4 +1,4 @@
-// Package worksteal implements concurrent work stealing for worker pools.
+// Package workstealpool implements concurrent work stealing for worker pools.
 //
 // Work-stealing pools exist for a specific shape of problem: recursive divide-and-conquer.
 // The classic example is parallel quicksort or a parallel tree walk.
@@ -7,7 +7,7 @@
 // A worker pool consists of multiple worker goroutines. Each worker owns a
 // lock-free deque. Workers execute their own work from the bottom of the
 // deque and steal work from the top of other workers' deques when they run out of local work.
-package worksteal
+package workstealpool
 
 import (
 	"context"
