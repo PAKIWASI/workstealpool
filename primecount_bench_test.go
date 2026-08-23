@@ -15,7 +15,7 @@ const benchRangeHi = 200_000
 // runCountPrimes is the shared benchmark body: run CountPrimesParallel
 // b.N times under cfg, discarding the result (correctness is covered by
 // primecount_test.go, not here).
-func runCountPrimes(b *testing.B, cfg PoolConfig) {
+func runCountPrimes(b *testing.B, cfg poolConfig) {
 	b.Helper()
 	ctx := context.Background()
 
@@ -33,7 +33,7 @@ func runCountPrimes(b *testing.B, cfg PoolConfig) {
 // past the point of contention exceeding available cores) returns eventually.
 func BenchmarkCountPrimes_PoolSize(b *testing.B) {
 	for _, poolSize := range []int{1, 2, 4, 8, 16, 32} {
-		cfg := PoolConfig{
+		cfg := poolConfig{
 			PoolSize:         poolSize,
 			InitialWorkerCap: 32,
 			ResultBuffSize:   64,
@@ -51,7 +51,7 @@ func BenchmarkCountPrimes_PoolSize(b *testing.B) {
 // enough cap should flatten that cost out. This isolates that effect.
 func BenchmarkCountPrimes_InitialWorkerCap(b *testing.B) {
 	for _, cap := range []int{2, 8, 32, 128, 512} {
-		cfg := PoolConfig{
+		cfg := poolConfig{
 			PoolSize:         8,
 			InitialWorkerCap: cap,
 			ResultBuffSize:   64,
@@ -71,7 +71,7 @@ func BenchmarkCountPrimes_InitialWorkerCap(b *testing.B) {
 // count).
 func BenchmarkCountPrimes_ResultBuffSize(b *testing.B) {
 	for _, buf := range []int{1, 4, 16, 64, 256, 1024} {
-		cfg := PoolConfig{
+		cfg := poolConfig{
 			PoolSize:         8,
 			InitialWorkerCap: 32,
 			ResultBuffSize:   buf,
@@ -90,7 +90,7 @@ func BenchmarkCountPrimes_ResultBuffSize(b *testing.B) {
 // enough leaves to keep every worker busy at all).
 func BenchmarkCountPrimes_Threshold(b *testing.B) {
 	for _, threshold := range []int{1, 10, 50, 200, 1000, 5000, benchRangeHi} {
-		cfg := PoolConfig{
+		cfg := poolConfig{
 			PoolSize:         8,
 			InitialWorkerCap: 32,
 			ResultBuffSize:   64,
@@ -113,7 +113,7 @@ func BenchmarkCountPrimes_PoolSizeXThreshold(b *testing.B) {
 
 	for _, poolSize := range poolSizes {
 		for _, threshold := range thresholds {
-			cfg := PoolConfig{
+			cfg := poolConfig{
 				PoolSize:         poolSize,
 				InitialWorkerCap: 32,
 				ResultBuffSize:   64,
@@ -131,7 +131,7 @@ func BenchmarkCountPrimes_PoolSizeXThreshold(b *testing.B) {
 // construction, goroutine startup) amortizes as the workload grows.
 func BenchmarkCountPrimes_RangeSize(b *testing.B) {
 	for _, hi := range []int{1_000, 10_000, 100_000, 1_000_000} {
-		cfg := PoolConfig{
+		cfg := poolConfig{
 			PoolSize:         8,
 			InitialWorkerCap: 32,
 			ResultBuffSize:   64,

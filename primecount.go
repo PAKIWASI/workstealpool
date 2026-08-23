@@ -78,8 +78,8 @@ func countPrimesTask(threshold int) Task[primeRange, int] {
 	}
 }
 
-// PoolConfig bundles the WorkerPool knobs this workload benchmarks against.
-type PoolConfig struct {
+// poolConfig bundles the WorkerPool knobs this workload benchmarks against.
+type poolConfig struct {
 	PoolSize         int // number of worker goroutines / deques
 	InitialWorkerCap int // initial capacity of each worker's LFdeque
 	ResultBuffSize   int // buffering on the results channel
@@ -91,7 +91,7 @@ type PoolConfig struct {
 // worker 0's deque with the whole range, Run starts every worker pulling
 // and spawning, and the loop over results here does the "conquer" step -
 // summing independent leaf counts as they arrive.
-func CountPrimesParallel(ctx context.Context, lo, hi int, cfg PoolConfig) (int, error) {
+func CountPrimesParallel(ctx context.Context, lo, hi int, cfg poolConfig) (int, error) {
 	pool := NewWorkerPool[primeRange, int](
 		ctx,
 		cfg.PoolSize,

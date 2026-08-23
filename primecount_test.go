@@ -34,7 +34,7 @@ func TestCountPrimesParallel_MatchesSequential(t *testing.T) {
 	const lo, hi = 0, 50_000
 	want := countPrimesSequential(lo, hi)
 
-	configs := []PoolConfig{
+	configs := []poolConfig{
 		{PoolSize: 1, InitialWorkerCap: 8, ResultBuffSize: 1, Threshold: 500},
 		{PoolSize: 2, InitialWorkerCap: 8, ResultBuffSize: 4, Threshold: 500},
 		{PoolSize: 4, InitialWorkerCap: 8, ResultBuffSize: 16, Threshold: 200},
@@ -58,7 +58,7 @@ func TestCountPrimesParallel_MatchesSequential(t *testing.T) {
 }
 
 func TestCountPrimesParallel_EmptyRange(t *testing.T) {
-	cfg := PoolConfig{PoolSize: 4, InitialWorkerCap: 8, ResultBuffSize: 4, Threshold: 100}
+	cfg := poolConfig{PoolSize: 4, InitialWorkerCap: 8, ResultBuffSize: 4, Threshold: 100}
 	got, err := CountPrimesParallel(context.Background(), 10, 10, cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -75,7 +75,7 @@ func TestCountPrimesParallel_SingleWorker(t *testing.T) {
 	const lo, hi = 0, 20_000
 	want := countPrimesSequential(lo, hi)
 
-	cfg := PoolConfig{PoolSize: 1, InitialWorkerCap: 2, ResultBuffSize: 1, Threshold: 37}
+	cfg := poolConfig{PoolSize: 1, InitialWorkerCap: 2, ResultBuffSize: 1, Threshold: 37}
 	got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -91,7 +91,7 @@ func TestCountPrimesParallel_ThresholdOfOne(t *testing.T) {
 	const lo, hi = 0, 5_000
 	want := countPrimesSequential(lo, hi)
 
-	cfg := PoolConfig{PoolSize: 8, InitialWorkerCap: 8, ResultBuffSize: 32, Threshold: 1}
+	cfg := poolConfig{PoolSize: 8, InitialWorkerCap: 8, ResultBuffSize: 32, Threshold: 1}
 	got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -111,7 +111,7 @@ func TestCountPrimesParallel_ThresholdOfOne(t *testing.T) {
 func TestCountPrimesParallel_Repeated(t *testing.T) {
 	const lo, hi = 0, 8_000
 	want := countPrimesSequential(lo, hi)
-	cfg := PoolConfig{PoolSize: 6, InitialWorkerCap: 4, ResultBuffSize: 8, Threshold: 23}
+	cfg := poolConfig{PoolSize: 6, InitialWorkerCap: 4, ResultBuffSize: 8, Threshold: 23}
 
 	for i := 0; i < 50; i++ {
 		got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
