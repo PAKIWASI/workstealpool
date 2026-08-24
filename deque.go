@@ -233,3 +233,11 @@ func (d *LFdeque[T]) StealHalf() (v []T, ok bool) {
 
 	return buf, true
 }
+
+func (d *LFdeque[T]) Len() int64 {
+	t := d.top.Load()
+	b := d.bottom.Load()
+	return b - t
+}
+
+
