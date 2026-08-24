@@ -4,13 +4,13 @@ A lock-free work-stealing scheduler for recursive divide-and-conquer
 workloads in Go, implementing the Chase-Lev deque (Lê, Pop, Cohen &
 Nardelli, PPoPP 2013).
 
-- **`deque.go`** — `LFdeque[T]`, a growable, array-based work-stealing
+- **`deque.go`** : `LFdeque[T]`, a growable, array-based work-stealing
   deque. One owner goroutine pushes/pops from the bottom; any number of
   thieves steal from the top.
-- **`work_pool.go`** — `WorkerPool[T, R]`, a pool of workers, each owning
+- **`work_pool.go`** : `WorkerPool[T, R]`, a pool of workers, each owning
   one `LFdeque[T]`. Workers run local work LIFO and steal from other
   workers' deques FIFO (in half-batches) when they run dry.
-- **`primecount.go`** — a divide-and-conquer prime-counting workload used
+- **`primecount.go`** : a divide-and-conquer prime-counting workload used
   to exercise the pool end-to-end, and as the correctness/benchmark
   harness for the rest of the package.
 
@@ -308,7 +308,7 @@ performance on the table either way.
 ### Pool size, deque capacity, result buffer — mostly a memory knob past a point
 
 Deque capacity and result-buffer size had a much smaller effect than
-threshold or pool size on this workload — a few hundred µs across the
+threshold or pool size on this workload. A few hundred µs across the
 whole sweep — but memory scales directly with whatever you ask for
 (e.g. `InitialWorkerCap=512` uses ~107 KB/op vs. ~43 KB/op at the
 default), so oversizing them costs memory for little to no speed benefit
@@ -341,7 +341,7 @@ the Chase-Lev paper. If the CAS fails (a thief lost the race), the value
 it just read is discarded via `ok == false`, but the read itself already
 happened, unsynchronized, against whatever the owner does next. So a
 losing thief's read is a genuine data race on paper — the value can even
-be torn for multi-word `T` — but since it's always thrown away, no caller
+be torn for multi-word `T`, but since it's always thrown away, no caller
 ever observes it. `-race` is correctly flagging an unsynchronized access,
 not producing a false positive; it's just one that provably can't corrupt
 a result.
@@ -349,10 +349,9 @@ a result.
 Two real fixes exist if you're adapting this for production, neither
 implemented here on purpose: **boxing** each element as
 `atomic.Pointer[T]` (real atomic access, costs one allocation per push),
-or **epoch/hazard-pointer reclamation** (what `crossbeam-deque` and
-`ForkJoinPool` do — no boxing, more machinery).
+or **epoch/hazard-pointer reclamation** (will attempt this)
 
 `TestCountPrimesParallel_MatchesSequential` and
 `TestCountPrimesParallel_Repeated` are the tests most likely to trigger
-it, by design — they drive real concurrent push/steal traffic through a
+it, by design. They drive real concurrent push/steal traffic through a
 struct-typed `T`.
