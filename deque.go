@@ -62,6 +62,7 @@ func (a *circularArray[T]) resizeCopy(newCap int, from, to int64) *circularArray
 //   - Thieves work the top end (FIFO: Steal), racing each other, and resolved by CAS
 //   - Thieves only race for the owner's PopBottom for the very last element,
 //   - This race is resolved by a CAS by both the thief and the owner
+// TODO: experminet with cache line padding
 type LFdeque[T any] struct {
 	top    atomic.Int64
 	bottom atomic.Int64

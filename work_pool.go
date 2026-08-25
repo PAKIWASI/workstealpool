@@ -56,7 +56,10 @@ type WorkerPool[T, R any] struct {
 	workers []Worker[T]
 	execute Task[T, R]
 
+	// every parked worker wakes up when this cannel is closed
 	wakeup atomic.Pointer[chan struct{}]
+	// how many workers are currently parked
+	parked atomic.Int32
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -182,6 +185,7 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 
 		spins++
 		if spins < maxStealAttemps {
+			// put this goroutine at the back of the queue but don't suspend it
 			runtime.Gosched()
 			continue // still within budget
 		}
@@ -195,18 +199,22 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 // parkUntilWork blocks the worker with id `idx` and adds it to a waiting list.
 // whenever more work is added by any worker, all workers on the list are awaken
 func (p *WorkerPool[T, R]) parkUntilWork() {
-	ch := *p.wakeup.Load()
-	select {
-	case <-p.ctx.Done():
-		return // shutdown call from elsewhere
-	case <-ch:
-	}
+    p.parked.Add(1)
+    defer p.parked.Add(-1)
+    ch := *p.wakeup.Load()
+    select {
+    case <-p.ctx.Done():
+    case <-ch:
+    }
 }
 
 func (p *WorkerPool[T, R]) broadcastWakeup() {
-	newCh := make(chan struct{})
-	old := p.wakeup.Swap(&newCh)
-	close(*old)
+    if p.parked.Load() == 0 {
+        return
+    }
+    newCh := make(chan struct{})
+    old := p.wakeup.Swap(&newCh)
+    close(*old)
 }
 
 // runTask implements the actual task execution of a worker.
