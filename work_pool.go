@@ -56,7 +56,7 @@ type WorkerPool[T, R any] struct {
 	workers []Worker[T]
 	execute Task[T, R]
 
-	wakeup chan struct{}
+	wakeup atomic.Pointer[chan struct{}]
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -88,7 +88,7 @@ func NewWorkerPool[T, R any](
 	ctx context.Context,
 	poolSize, initialWorkerCap, resultBuffSize int,
 	execute Task[T, R],
-) WorkerPool[T, R] {
+) *WorkerPool[T, R] {
 	// derive a cancellable context from the user's
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -97,14 +97,18 @@ func NewWorkerPool[T, R any](
 		workers[i] = newWorker[T](initialWorkerCap)
 	}
 
-	return WorkerPool[T, R]{
+	p := &WorkerPool[T, R]{
 		workers: workers,
 		execute: execute,
-		wakeup:  make(chan struct{}, 1),
 		ctx:     ctx,
 		cancel:  cancel,
 		results: make(chan R, resultBuffSize),
 	}
+
+	ch := make(chan struct{})
+	p.wakeup.Store(&ch)
+
+	return p
 }
 
 // Submit adds initial work to the pool. Call before Run
@@ -183,29 +187,26 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 		}
 
 		// Exhausted the spin budget: actually block until woken.
-		p.parkUntilWork(idx)
+		p.parkUntilWork()
 		spins = 0
 	}
 }
 
 // parkUntilWork blocks the worker with id `idx` and adds it to a waiting list.
 // whenever more work is added by any worker, all workers on the list are awaken
-func (p *WorkerPool[T, R]) parkUntilWork(idx int) {
+func (p *WorkerPool[T, R]) parkUntilWork() {
+	ch := *p.wakeup.Load()
 	select {
 	case <-p.ctx.Done():
 		return // shutdown call from elsewhere
-	case <-p.wakeup:
+	case <-ch:
 	}
 }
 
 func (p *WorkerPool[T, R]) broadcastWakeup() {
-	// capacity 1 is the minimum buffering that makes the send genuinely non-blocking in the common case
-	// (someone's about to check anyway, or already parked) while still being meaningful
-	// (there's an actual bit being set, not just a default-always no-op like capacity 0 would produce)
-	select {
-	case p.wakeup <- struct{}{}:
-	default:
-	}
+	newCh := make(chan struct{})
+	old := p.wakeup.Swap(&newCh)
+	close(*old)
 }
 
 // runTask implements the actual task execution of a worker.

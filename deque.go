@@ -209,35 +209,36 @@ func (d *LFdeque[T]) StealHalf() (v []T, ok bool) {
 	t := d.top.Load()
 	b := d.bottom.Load()
 	half := (b - t) / 2
-
 	if half < 1 {
 		return nil, false
 	}
-
+ 
 	buf := make([]T, 0, half)
 	for i := int64(0); i < half; i++ {
-		val, stole := d.Steal()
-		if !stole {
-			// Either the deque emptied out from under us, or we lost a
-			// single-slot race to another thief/the owner. Either way,
-			// top has moved out from under our target sequence, so
-			// stop rather than trying to guess the next valid index.
-			break
+		curTop := d.top.Load()
+		curBottom := d.bottom.Load()
+		if curBottom-curTop <= 0 {
+			break // nothing left to safely claim, per a fresh read
+		}
+ 
+		a := d.array.Load() // fresh, in case a resize swapped it in
+		val := a.get(curTop)
+ 
+		if !d.top.CompareAndSwap(curTop, curTop+1) {
+			break // lost the race — deque shrank or another thief/owner beat us here
 		}
 		buf = append(buf, val)
 	}
-
+ 
 	if len(buf) == 0 {
 		return nil, false
 	}
-
 	return buf, true
 }
 
+
 func (d *LFdeque[T]) Len() int64 {
-	t := d.top.Load()
-	b := d.bottom.Load()
-	return b - t
+	return d.bottom.Load() - d.top.Load()
 }
 
 
