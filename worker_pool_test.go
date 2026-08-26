@@ -14,7 +14,7 @@ import (
 func TestWorkerPool_ParkingUnderLightLoad(t *testing.T) {
 	want := countPrimesSequential(0, 3000)
 
-	for trial := 0; trial < 100; trial++ {
+	for trial := range 100 {
 		cfg := poolConfig{PoolSize: 32, InitialWorkerCap: 8, ResultBuffSize: 4, Threshold: 500}
 
 		done := make(chan struct{})

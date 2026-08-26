@@ -1,0 +1,162 @@
+
+╭╴ artixThinkpad  wasi projects/go/workstealpool   work
+╰── go test -v                                                                                                                                       15:27
+=== RUN   TestLFdeque_BasicLIFO
+--- PASS: TestLFdeque_BasicLIFO (0.00s)
+=== RUN   TestLFdeque_StealFIFO
+--- PASS: TestLFdeque_StealFIFO (0.00s)
+=== RUN   TestLFdeque_OwnerAndThiefEnds
+--- PASS: TestLFdeque_OwnerAndThiefEnds (0.00s)
+=== RUN   TestLFdeque_Resize
+--- PASS: TestLFdeque_Resize (0.00s)
+=== RUN   TestLFdeque_StealHalfExactSizes
+=== RUN   TestLFdeque_StealHalfExactSizes/\x00
+=== RUN   TestLFdeque_StealHalfExactSizes/\x01
+=== RUN   TestLFdeque_StealHalfExactSizes/\x02
+=== RUN   TestLFdeque_StealHalfExactSizes/\x03
+=== RUN   TestLFdeque_StealHalfExactSizes/\x04
+=== RUN   TestLFdeque_StealHalfExactSizes/\x05
+=== RUN   TestLFdeque_StealHalfExactSizes/\x06
+=== RUN   TestLFdeque_StealHalfExactSizes/\a
+=== RUN   TestLFdeque_StealHalfExactSizes/\b
+=== RUN   TestLFdeque_StealHalfExactSizes/_
+=== RUN   TestLFdeque_StealHalfExactSizes/_#01
+=== RUN   TestLFdeque_StealHalfExactSizes/d
+--- PASS: TestLFdeque_StealHalfExactSizes (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\x00 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\x01 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\x02 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\x03 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\x04 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\x05 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\x06 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\a (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/\b (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/_ (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/_#01 (0.00s)
+    --- PASS: TestLFdeque_StealHalfExactSizes/d (0.00s)
+=== RUN   TestLFdeque_StealHalfMultipleBatches
+--- PASS: TestLFdeque_StealHalfMultipleBatches (0.00s)
+=== RUN   TestLFdeque_StealHalfConcurrentThieves
+--- PASS: TestLFdeque_StealHalfConcurrentThieves (0.01s)
+=== RUN   TestLFdeque_ConcurrentOwnerAndThieves
+--- PASS: TestLFdeque_ConcurrentOwnerAndThieves (0.00s)
+=== RUN   TestLFdeque_WorkloadRatios
+=== RUN   TestLFdeque_WorkloadRatios/owner_only
+    deque_test.go:473: owner=10000 stolen=0 total=10000
+=== RUN   TestLFdeque_WorkloadRatios/one_thief
+    deque_test.go:473: owner=5254 stolen=4746 total=10000
+=== RUN   TestLFdeque_WorkloadRatios/two_thieves
+    deque_test.go:473: owner=4995 stolen=5005 total=10000
+=== RUN   TestLFdeque_WorkloadRatios/four_thieves
+    deque_test.go:473: owner=4322 stolen=5678 total=10000
+=== RUN   TestLFdeque_WorkloadRatios/eight_thieves
+    deque_test.go:473: owner=3640 stolen=6360 total=10000
+--- PASS: TestLFdeque_WorkloadRatios (0.00s)
+    --- PASS: TestLFdeque_WorkloadRatios/owner_only (0.00s)
+    --- PASS: TestLFdeque_WorkloadRatios/one_thief (0.00s)
+    --- PASS: TestLFdeque_WorkloadRatios/two_thieves (0.00s)
+    --- PASS: TestLFdeque_WorkloadRatios/four_thieves (0.00s)
+    --- PASS: TestLFdeque_WorkloadRatios/eight_thieves (0.00s)
+=== RUN   TestLFdeque_StealHalf_NoOverlapUnderOwnerContention
+--- PASS: TestLFdeque_StealHalf_NoOverlapUnderOwnerContention (0.01s)
+=== RUN   TestLFdeque_PushSliceBottom
+--- PASS: TestLFdeque_PushSliceBottom (0.00s)
+=== RUN   TestCountPrimesSequential_KnownValues
+--- PASS: TestCountPrimesSequential_KnownValues (0.00s)
+=== RUN   TestCountPrimesParallel_MatchesSequential
+=== RUN   TestCountPrimesParallel_MatchesSequential/#00
+=== RUN   TestCountPrimesParallel_MatchesSequential/#01
+=== RUN   TestCountPrimesParallel_MatchesSequential/#02
+=== RUN   TestCountPrimesParallel_MatchesSequential/#03
+=== RUN   TestCountPrimesParallel_MatchesSequential/#04
+=== RUN   TestCountPrimesParallel_MatchesSequential/#05
+--- PASS: TestCountPrimesParallel_MatchesSequential (0.03s)
+    --- PASS: TestCountPrimesParallel_MatchesSequential/#00 (0.00s)
+    --- PASS: TestCountPrimesParallel_MatchesSequential/#01 (0.00s)
+    --- PASS: TestCountPrimesParallel_MatchesSequential/#02 (0.00s)
+    --- PASS: TestCountPrimesParallel_MatchesSequential/#03 (0.00s)
+    --- PASS: TestCountPrimesParallel_MatchesSequential/#04 (0.02s)
+    --- PASS: TestCountPrimesParallel_MatchesSequential/#05 (0.00s)
+=== RUN   TestCountPrimesParallel_EmptyRange
+--- PASS: TestCountPrimesParallel_EmptyRange (0.00s)
+=== RUN   TestCountPrimesParallel_SingleWorker
+--- PASS: TestCountPrimesParallel_SingleWorker (0.00s)
+=== RUN   TestCountPrimesParallel_ThresholdOfOne
+--- PASS: TestCountPrimesParallel_ThresholdOfOne (0.00s)
+=== RUN   TestCountPrimesParallel_Repeated
+--- PASS: TestCountPrimesParallel_Repeated (0.02s)
+=== RUN   TestWorkerPool_ParkingUnderLightLoad
+--- PASS: TestWorkerPool_ParkingUnderLightLoad (0.01s)
+PASS
+ok  	github.com/PAKIWASI/workstealpool	0.087s
+╭╴ artixThinkpad  wasi projects/go/workstealpool   work
+╰── go test -bench=. -benchmem ./...                                                                                                                 15:28
+goos: linux
+goarch: amd64
+pkg: github.com/PAKIWASI/workstealpool
+cpu: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
+BenchmarkLFdeque_PushBottom-8               	25653650	        46.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_PopBottom-8                	38330040	        31.30 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_Steal-8                    	47534803	        27.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_StealHalf-8                	  294626	      5986 ns/op	     682 B/op	       0 allocs/op
+BenchmarkLFdeque_ConcurrentSteal/thieves=1-8         	61133359	        19.78 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_ConcurrentSteal/thieves=2-8         	59490446	        19.65 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_ConcurrentSteal/thieves=4-8         	60997137	        19.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_ConcurrentSteal/thieves=8-8         	60704170	        19.68 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_ConcurrentSteal/thieves=16-8        	61000264	        19.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_WorkStealing/thieves=1-8            	20257773	        61.60 ns/op	       4 B/op	       0 allocs/op
+BenchmarkLFdeque_WorkStealing/thieves=2-8            	24121862	        45.23 ns/op	     754 B/op	       0 allocs/op
+BenchmarkLFdeque_WorkStealing/thieves=4-8            	35252079	        37.24 ns/op	     649 B/op	       0 allocs/op
+BenchmarkLFdeque_WorkStealing/thieves=8-8            	35273638	        33.72 ns/op	     579 B/op	       0 allocs/op
+BenchmarkLFdeque_WorkStealing/thieves=16-8           	30861014	        36.51 ns/op	     585 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/Steal/16-8              	46984177	        25.40 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/StealHalf/16-8          	59382258	        31.46 ns/op	       4 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/Steal/64-8              	45952496	        25.51 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/StealHalf/64-8          	58037594	        32.42 ns/op	       4 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/Steal/256-8             	46237495	        25.42 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/StealHalf/256-8         	59904057	        32.07 ns/op	       4 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/Steal/1024-8            	45912700	        25.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/StealHalf/1024-8        	59871151	        31.73 ns/op	       4 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/Steal/4096-8            	46684653	        25.04 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLFdeque_StealVsHalf/StealHalf/4096-8        	58186952	        34.23 ns/op	       4 B/op	       0 allocs/op
+BenchmarkCountPrimes_PoolSize/workers=1-8            	      87	  12530067 ns/op	   39088 B/op	    1556 allocs/op
+BenchmarkCountPrimes_PoolSize/workers=2-8            	     178	   6885380 ns/op	   40129 B/op	    1572 allocs/op
+BenchmarkCountPrimes_PoolSize/workers=4-8            	     296	   4078656 ns/op	   42259 B/op	    1614 allocs/op
+BenchmarkCountPrimes_PoolSize/workers=8-8            	     385	   3119947 ns/op	   45778 B/op	    1681 allocs/op
+BenchmarkCountPrimes_PoolSize/workers=16-8           	     391	   3048957 ns/op	   51388 B/op	    1747 allocs/op
+BenchmarkCountPrimes_PoolSize/workers=32-8           	     381	   3139122 ns/op	   61550 B/op	    1835 allocs/op
+BenchmarkCountPrimes_InitialWorkerCap/cap=2-8        	     379	   3110035 ns/op	   43543 B/op	    1688 allocs/op
+BenchmarkCountPrimes_InitialWorkerCap/cap=8-8        	     386	   3144099 ns/op	   43419 B/op	    1685 allocs/op
+BenchmarkCountPrimes_InitialWorkerCap/cap=32-8       	     381	   3112555 ns/op	   45672 B/op	    1680 allocs/op
+BenchmarkCountPrimes_InitialWorkerCap/cap=128-8      	     384	   3134528 ns/op	   58011 B/op	    1680 allocs/op
+BenchmarkCountPrimes_InitialWorkerCap/cap=512-8      	     380	   3208917 ns/op	  107089 B/op	    1678 allocs/op
+BenchmarkCountPrimes_ResultBuffSize/buf=1-8          	     292	   4051984 ns/op	   45197 B/op	    1680 allocs/op
+BenchmarkCountPrimes_ResultBuffSize/buf=4-8          	     336	   3589650 ns/op	   45265 B/op	    1681 allocs/op
+BenchmarkCountPrimes_ResultBuffSize/buf=16-8         	     351	   3403519 ns/op	   45345 B/op	    1681 allocs/op
+BenchmarkCountPrimes_ResultBuffSize/buf=64-8         	     370	   3197168 ns/op	   45687 B/op	    1679 allocs/op
+BenchmarkCountPrimes_ResultBuffSize/buf=256-8        	     380	   3043176 ns/op	   47349 B/op	    1680 allocs/op
+BenchmarkCountPrimes_ResultBuffSize/buf=1024-8       	     381	   3001971 ns/op	   54424 B/op	    1677 allocs/op
+BenchmarkCountPrimes_Threshold/threshold=1-8         	      13	  94532042 ns/op	14503270 B/op	  602641 allocs/op
+BenchmarkCountPrimes_Threshold/threshold=10-8        	      61	  20025195 ns/op	 2393206 B/op	   99217 allocs/op
+BenchmarkCountPrimes_Threshold/threshold=50-8        	     243	   4865632 ns/op	  309293 B/op	   12625 allocs/op
+BenchmarkCountPrimes_Threshold/threshold=200-8       	     357	   3425179 ns/op	   83650 B/op	    3257 allocs/op
+BenchmarkCountPrimes_Threshold/threshold=1000-8      	     394	   3049501 ns/op	   26514 B/op	     881 allocs/op
+BenchmarkCountPrimes_Threshold/threshold=5000-8      	     381	   3144723 ns/op	   11854 B/op	     270 allocs/op
+BenchmarkCountPrimes_Threshold/threshold=200000-8    	      97	  12836282 ns/op	    6664 B/op	      58 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=1/threshold=20-8         	      64	  17243766 ns/op	 1181882 B/op	   49172 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=1/threshold=500-8        	      91	  12525513 ns/op	   39088 B/op	    1556 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=1/threshold=10000-8      	      93	  13188263 ns/op	    4528 B/op	     116 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=4/threshold=20-8         	     100	  11477465 ns/op	 1192122 B/op	   49419 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=4/threshold=500-8        	     286	   4117513 ns/op	   42183 B/op	    1612 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=4/threshold=10000-8      	     229	   4426830 ns/op	    6948 B/op	     144 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=16/threshold=20-8        	      92	  12291340 ns/op	 1222231 B/op	   50386 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=16/threshold=500-8       	     382	   3101172 ns/op	   51362 B/op	    1746 allocs/op
+BenchmarkCountPrimes_PoolSizeXThreshold/workers=16/threshold=10000-8     	     360	   3330942 ns/op	   14248 B/op	     204 allocs/op
+BenchmarkCountPrimes_RangeSize/hi=1000-8                                 	   63814	     18680 ns/op	    6736 B/op	      61 allocs/op
+BenchmarkCountPrimes_RangeSize/hi=10000-8                                	   12636	     95516 ns/op	    9086 B/op	     160 allocs/op
+BenchmarkCountPrimes_RangeSize/hi=100000-8                               	     948	   1239071 ns/op	   26286 B/op	     876 allocs/op
+BenchmarkCountPrimes_RangeSize/hi=1000000-8                              	      42	  28031041 ns/op	  160065 B/op	    6425 allocs/op
+BenchmarkCountPrimes_Sequential-8                                        	      96	  12200263 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/PAKIWASI/workstealpool	122.362s

@@ -62,6 +62,7 @@ func (a *circularArray[T]) resizeCopy(newCap int, from, to int64) *circularArray
 //   - Thieves work the top end (FIFO: Steal), racing each other, and resolved by CAS
 //   - Thieves only race for the owner's PopBottom for the very last element,
 //   - This race is resolved by a CAS by both the thief and the owner
+//
 // TODO: experminet with cache line padding
 type LFdeque[T any] struct {
 	top    atomic.Int64
@@ -111,7 +112,7 @@ func (d *LFdeque[T]) PushSliceBottom(v []T) {
 	}
 	// first write all the values, while keeping the same `bottom` value
 	for i, val := range v {
-		a.put(b + int64(i), val)
+		a.put(b+int64(i), val)
 	}
 	// update the bottom value
 	d.bottom.Store(b + sliceLen)
@@ -213,33 +214,30 @@ func (d *LFdeque[T]) StealHalf() (v []T, ok bool) {
 	if half < 1 {
 		return nil, false
 	}
- 
+
 	buf := make([]T, 0, half)
-	for i := int64(0); i < half; i++ {
+	for range half {
 		curTop := d.top.Load()
 		curBottom := d.bottom.Load()
 		if curBottom-curTop <= 0 {
 			break // nothing left to safely claim, per a fresh read
 		}
- 
+
 		a := d.array.Load() // fresh, in case a resize swapped it in
 		val := a.get(curTop)
- 
+
 		if !d.top.CompareAndSwap(curTop, curTop+1) {
 			break // lost the race — deque shrank or another thief/owner beat us here
 		}
 		buf = append(buf, val)
 	}
- 
+
 	if len(buf) == 0 {
 		return nil, false
 	}
 	return buf, true
 }
 
-
 func (d *LFdeque[T]) Len() int64 {
 	return d.bottom.Load() - d.top.Load()
 }
-
-

@@ -10,7 +10,7 @@ import (
 func TestLFdeque_BasicLIFO(t *testing.T) {
 	d := NewLFdeque[int](8)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		d.PushBottom(i)
 	}
 
@@ -40,11 +40,11 @@ func TestLFdeque_BasicLIFO(t *testing.T) {
 func TestLFdeque_StealFIFO(t *testing.T) {
 	d := NewLFdeque[int](8)
 
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		d.PushBottom(i)
 	}
 
-	for want := 0; want < 8; want++ {
+	for want := range 8 {
 		got, ok := d.Steal()
 		if !ok {
 			t.Fatalf("Steal() failed, want %d", want)
@@ -62,7 +62,7 @@ func TestLFdeque_StealFIFO(t *testing.T) {
 func TestLFdeque_OwnerAndThiefEnds(t *testing.T) {
 	d := NewLFdeque[int](8)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		d.PushBottom(i)
 	}
 
@@ -92,7 +92,7 @@ func TestLFdeque_Resize(t *testing.T) {
 
 	const n = 10_000
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		d.PushBottom(i)
 	}
 
@@ -185,7 +185,7 @@ func TestLFdeque_StealHalfMultipleBatches(t *testing.T) {
 
 	const n = 1024
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		d.PushBottom(i)
 	}
 
@@ -232,7 +232,7 @@ func TestLFdeque_StealHalfConcurrentThieves(t *testing.T) {
 
 	d := NewLFdeque[int](8)
 
-	for i := 0; i < initial; i++ {
+	for i := range initial {
 		d.PushBottom(i)
 	}
 
@@ -243,11 +243,9 @@ func TestLFdeque_StealHalfConcurrentThieves(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < thieves; i++ {
-		wg.Add(1)
+	for range thieves {
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			for {
 				values, ok := d.StealHalf()
@@ -268,7 +266,7 @@ func TestLFdeque_StealHalfConcurrentThieves(t *testing.T) {
 					delivered.Add(1)
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -299,7 +297,7 @@ func TestLFdeque_ConcurrentOwnerAndThieves(t *testing.T) {
 
 	d := NewLFdeque[int](8)
 
-	for i := 0; i < initial; i++ {
+	for i := range initial {
 		d.PushBottom(i)
 	}
 
@@ -329,11 +327,9 @@ func TestLFdeque_ConcurrentOwnerAndThieves(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < thieves; i++ {
-		wg.Add(1)
+	for range thieves {
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			for {
 				values, ok := d.StealHalf()
@@ -350,13 +346,10 @@ func TestLFdeque_ConcurrentOwnerAndThieves(t *testing.T) {
 					record(v)
 				}
 			}
-		}()
+		})
 	}
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		pops := 0
 
@@ -382,7 +375,7 @@ func TestLFdeque_ConcurrentOwnerAndThieves(t *testing.T) {
 				pushed.Add(1)
 			}
 		}
-	}()
+	})
 
 	wg.Wait()
 
@@ -417,7 +410,7 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 
 			d := NewLFdeque[int](8)
 
-			for i := 0; i < initial; i++ {
+			for i := range initial {
 				d.PushBottom(i)
 			}
 
@@ -427,10 +420,8 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 			var wg sync.WaitGroup
 
 			for i := 0; i < tc.thieves; i++ {
-				wg.Add(1)
 
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 
 					for {
 						values, ok := d.StealHalf()
@@ -445,13 +436,10 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 
 						stolen.Add(int64(len(values)))
 					}
-				}()
+				})
 			}
 
-			wg.Add(1)
-
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 
 				for {
 					_, ok := d.PopBottom()
@@ -466,7 +454,7 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 
 					owner.Add(1)
 				}
-			}()
+			})
 
 			wg.Wait()
 
@@ -479,8 +467,6 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 		})
 	}
 }
-
-
 
 // TestLFdeque_StealHalf_NoOverlapUnderOwnerContention is a regression test
 // for a bug in an earlier StealHalf implementation: it computed
@@ -503,9 +489,9 @@ func TestLFdeque_StealHalf_NoOverlapUnderOwnerContention(t *testing.T) {
 		n      = 200
 	)
 
-	for trial := 0; trial < trials; trial++ {
+	for trial := range trials {
 		d := NewLFdeque[int](64)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			d.PushBottom(i)
 		}
 
@@ -513,9 +499,7 @@ func TestLFdeque_StealHalf_NoOverlapUnderOwnerContention(t *testing.T) {
 		var dup atomic.Int64
 
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			vals, ok := d.StealHalf()
 			if !ok {
 				return
@@ -525,7 +509,7 @@ func TestLFdeque_StealHalf_NoOverlapUnderOwnerContention(t *testing.T) {
 					dup.Add(1)
 				}
 			}
-		}()
+		})
 
 		// Vary the interleaving a little across trials instead of
 		// always racing the same way.
@@ -533,7 +517,7 @@ func TestLFdeque_StealHalf_NoOverlapUnderOwnerContention(t *testing.T) {
 			runtime.Gosched()
 		}
 
-		for i := 0; i < n; i++ {
+		for range n {
 			v, ok := d.PopBottom()
 			if !ok {
 				break

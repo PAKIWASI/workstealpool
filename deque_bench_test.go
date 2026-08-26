@@ -52,7 +52,7 @@ func BenchmarkLFdeque_Steal(b *testing.B) {
 func BenchmarkLFdeque_StealHalf(b *testing.B) {
 	d := NewLFdeque[int](1024)
 
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		d.PushBottom(i)
 	}
 
@@ -62,7 +62,7 @@ func BenchmarkLFdeque_StealHalf(b *testing.B) {
 		values, ok := d.StealHalf()
 
 		if !ok {
-			for j := 0; j < 1024; j++ {
+			for j := range 1024 {
 				d.PushBottom(j)
 			}
 			continue
@@ -85,16 +85,14 @@ func BenchmarkLFdeque_ConcurrentSteal(b *testing.B) {
 			var wg sync.WaitGroup
 			b.ResetTimer()
 
-			for i := 0; i < thieves; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+			for range thieves {
+				wg.Go(func() {
 					for {
 						if _, ok := d.Steal(); !ok {
 							return
 						}
 					}
-				}()
+				})
 			}
 
 			wg.Wait()
@@ -116,9 +114,7 @@ func BenchmarkLFdeque_WorkStealing(b *testing.B) {
 
 			b.ResetTimer()
 
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for {
 					select {
 					case <-done:
@@ -129,12 +125,10 @@ func BenchmarkLFdeque_WorkStealing(b *testing.B) {
 						return
 					}
 				}
-			}()
+			})
 
-			for i := 0; i < thieves; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+			for range thieves {
+				wg.Go(func() {
 					for stolen.Load() < int64(b.N) {
 						values, ok := d.StealHalf()
 						if !ok {
@@ -146,7 +140,7 @@ func BenchmarkLFdeque_WorkStealing(b *testing.B) {
 						}
 						stolen.Add(int64(len(values)))
 					}
-				}()
+				})
 			}
 
 			wg.Wait()
@@ -160,7 +154,7 @@ func BenchmarkLFdeque_StealVsHalf(b *testing.B) {
 		b.Run("Steal/"+strconv.Itoa(size), func(b *testing.B) {
 			d := NewLFdeque[int](size)
 
-			for i := 0; i < size; i++ {
+			for i := range size {
 				d.PushBottom(i)
 			}
 
@@ -176,7 +170,7 @@ func BenchmarkLFdeque_StealVsHalf(b *testing.B) {
 		b.Run("StealHalf/"+strconv.Itoa(size), func(b *testing.B) {
 			d := NewLFdeque[int](size)
 
-			for i := 0; i < size; i++ {
+			for i := range size {
 				d.PushBottom(i)
 			}
 

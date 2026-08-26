@@ -13,8 +13,8 @@ func TestCountPrimesSequential_KnownValues(t *testing.T) {
 	}{
 		{0, 0},
 		{2, 0},
-		{3, 1},   // {2}
-		{10, 4},  // {2,3,5,7}
+		{3, 1},  // {2}
+		{10, 4}, // {2,3,5,7}
 		{100, 25},
 		{1000, 168},
 	}
@@ -113,7 +113,7 @@ func TestCountPrimesParallel_Repeated(t *testing.T) {
 	want := countPrimesSequential(lo, hi)
 	cfg := poolConfig{PoolSize: 6, InitialWorkerCap: 4, ResultBuffSize: 8, Threshold: 23}
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
 		if err != nil {
 			t.Fatalf("run %d: unexpected error: %v", i, err)
