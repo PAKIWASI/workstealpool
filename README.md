@@ -40,36 +40,35 @@ node). See `primecount.go` for a worked example.
 ## Writing a Task function
 
 ```go
-type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result *R, err error)
+type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result R, ok bool, err error)
 ```
 
-Every call to your `Task` is one node in the recursion tree, and it must
-do exactly one of two things:
+Every call to your `Task` is one node in the recursion tree, and it returns three distinct signals:
 
-- **Leaf**: do the real work for `item` and return `(&result, nil)`.
-- **Internal node**: decide `item` is still too big, call `spawn(child)`
-  one or more times to hand off smaller pieces, and return `(nil, nil)`.
-  Don't do both — a node that spawns children shouldn't also return a
-  result, since nothing would combine it with the children's results.
+- **Leaf**: do the real work for `item` and return `(result, true, nil)`. The result is emitted to the results channel.
+- **Internal node**: decide `item` is still too big, call `spawn(child)` one or more times to hand off smaller pieces, and return `(zero, false, nil)`. Nothing is emitted.
+- **Fatal error**: return `(zero, false, err)`. The pool aborts and `Wait()` reports this error.
+
+Because `R` is returned by value without indirection (`*R`), `R` can be any type (struct, pointer, interface, or scalar) without forcing a heap allocation for leaf returns.
 
 Worked example, from `primecount.go` (bisect a range until it's small
 enough to count directly):
 
 ```go
 func countPrimesTask(threshold int) Task[primeRange, int] {
-    return func(ctx context.Context, item primeRange, spawn func(primeRange)) (*int, error) {
+    return func(ctx context.Context, item primeRange, spawn func(primeRange)) (int, bool, error) {
         width := item.Hi - item.Lo
         if width <= threshold {
             // Leaf: do the real work, return a result.
             count := countPrimesSequential(item.Lo, item.Hi)
-            return &count, nil
+            return count, true, nil
         }
 
         // Internal node: split and hand off both halves.
         mid := item.Lo + width/2
         spawn(primeRange{Lo: item.Lo, Hi: mid})
         spawn(primeRange{Lo: mid, Hi: item.Hi})
-        return nil, nil
+        return 0, false, nil
     }
 }
 ```
@@ -79,7 +78,7 @@ Rules to keep in mind:
 - **Call `spawn` synchronously, from inside the `Task` call itself.**
   It schedules onto the *calling worker's own* deque — don't stash it and
   call it later, or call it from another goroutine.
-- **Every result you want must come from a `return &result, nil`**, not
+- **Every result you want must come from a `return result, true, nil`**, not
   from a side channel. The pool collects results only through the return
   value; combining/summing them (like the range-counting loop in
   `CountPrimesParallel`) is the caller's job after draining `Run()`, not
@@ -109,8 +108,7 @@ subdirectory somewhere. Returning that from `Task` as `error` would
 cancel the entire walk over one unreadable folder, which is almost never
 what you want.
 
-Instead, fold expected, recoverable failures into `R` and keep returning
-`nil` for `error`:
+Instead, fold expected, recoverable failures into `R` and return `(result, true, nil)`:
 
 ```go
 type WalkResult struct {
@@ -119,21 +117,21 @@ type WalkResult struct {
     Err  error        // non-nil = recoverable per-item failure
 }
 
-func walkTask(ctx context.Context, dir string, spawn func(string)) (*WalkResult, error) {
+func walkTask(ctx context.Context, dir string, spawn func(string)) (WalkResult, bool, error) {
     entries, err := os.ReadDir(dir)
     if err != nil {
         if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
             // Expected: report it as a leaf result, don't abort the pool.
-            return &WalkResult{Path: dir, Err: err}, nil
+            return WalkResult{Path: dir, Err: err}, true, nil
         }
         // Unexpected (corrupted mount, unusual I/O failure, ...): abort.
-        return nil, err
+        return WalkResult{}, false, err
     }
 
     for _, e := range entries {
         spawn(filepath.Join(dir, e.Name()))
     }
-    return nil, nil
+    return WalkResult{Path: dir}, true, nil
 }
 ```
 
@@ -158,9 +156,9 @@ Guidelines this generalizes to:
   keeps the scheduler generic instead of leaking walker-specific
   semantics into it.
 - **Recoverable failures are data, not control flow.** They travel out
-  through `return &result, nil`, same as any other leaf value, because
+  through `return result, true, nil`, same as any other leaf value, because
   results are the only per-item channel out of the pool.
-- **Reserve `return nil, err` for the true first case**: something the
+- **Reserve `return zero, false, err` for the true first case**: something the
   running `Task` can't classify or recover from, where continuing to
   process other items isn't safe or meaningful (out of file descriptors,
   a bug, a context you should have checked but didn't). That's the one

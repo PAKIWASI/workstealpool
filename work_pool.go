@@ -40,11 +40,18 @@ func newWorker[T any](capacity int) Worker[T] {
 // Task is the unit of work a WorkerPool executes.
 //
 // ctx should be checked by long-running tasks that want to be interruptible.
-// spawn schedules a child item of work onto the calling worker's local deque
+// spawn schedules a child item of work onto the calling worker's local deque;
 // it must only be called synchronously, from within this Task invocation.
-// A non-nil error causes the pool to record it (first error wins) and begin shutting down all workers.
-// T is the input type and R is the result type
-type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result *R, err error)
+//
+// The three return values encode three distinct outcomes:
+//   - err != nil: fatal — the pool cancels and records this as its terminal error.
+//   - ok == true: leaf — result is emitted on the results channel.
+//   - ok == false: internal node — the task only spawned children; nothing is emitted.
+//
+// R is unconstrained (any), so it can be a value type, pointer, interface, or struct.
+// Returning by value avoids any forced heap allocation.
+// T is the input type and R is the result type.
+type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result R, ok bool, err error)
 
 // WorkerPool manages a collection of workers and schedules work between them.
 //
@@ -227,13 +234,13 @@ func (p *WorkerPool[T, R]) runTask(idx int, item T) error {
 		p.broadcastWakeup()
 	}
 
-	result, err := p.execute(p.ctx, item, spawn)
+	result, ok, err := p.execute(p.ctx, item, spawn)
 	if err != nil {
 		return err // errgroup records it and cancels egCtx for every worker
 	}
-	if result != nil {
+	if ok {
 		select {
-		case p.results <- *result:
+		case p.results <- result:
 		case <-p.ctx.Done():
 		}
 	}
