@@ -36,7 +36,10 @@ type Worker[T any] struct {
 }
 
 func newWorker[T any](capacity int) Worker[T] {
-	return Worker[T]{deque: NewLFdeque[T](capacity), scratch: make([]T, capacity/2)}
+	return Worker[T]{
+		deque: NewLFdeque[T](capacity),
+		scratch: make([]T, capacity/2),
+	}
 }
 
 // Task is the unit of work a WorkerPool executes.
@@ -46,9 +49,9 @@ func newWorker[T any](capacity int) Worker[T] {
 // It must only be called synchronously, from within this Task invocation.
 //
 // The three return values encode three distinct outcomes:
-//   - err != nil: fatal: the pool cancels and records this as its terminal error.
-//   - ok == true: leaf: result is emitted on the results channel.
-//   - ok == false: internal node: the task only spawned children, nothing is emitted.
+//   - err != nil: ( fatal ) the pool cancels and records this as its terminal error.
+//   - ok == true: ( leaf ) result is emitted on the results channel.
+//   - ok == false: ( internal node ) the task only spawned children, nothing is emitted.
 //
 // T is the input type and R is the result type.
 type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result R, ok bool, err error)
@@ -64,7 +67,7 @@ type WorkerPool[T, R any] struct {
 	execute Task[T, R]
 
 	// every parked worker wakes up when this cannel is closed
-	wakeup atomic.Pointer[chan struct{}]	// TODO: use a generation counter + a single persistant sync.Cond-style wakup
+	wakeup atomic.Pointer[chan struct{}]   // TODO: use a generation counter + a single persistant sync.Cond-style wakup
 	// how many workers are currently parked
 	parked atomic.Int32
 
