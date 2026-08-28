@@ -255,11 +255,10 @@ func (p *WorkerPool[T, R]) runTask(idx int, item T) error {
 // victim among the other workers in the pool. It tries up to len(workers)-1
 // distinct victims before giving up.
 func (p *WorkerPool[T, R]) StealHalf(thiefIdx int) (ok bool) {
-	n := len(p.workers)
-	if n > 1 {
+	if n := len(p.workers); n > 1 {
 		// Random start index, then scan forward so we don't retry the same
 		// victim twice and don't bias toward low-index workers.
-		start := rand.IntN(n)
+		start := rand.IntN(n)	// TODO: this escapes to heap??
 
 		for i := range n {
 			idx := (start + i) % n
