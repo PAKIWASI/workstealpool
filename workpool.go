@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// TODO: should this be configurable?
 const maxStealAttemps = 50
 
 // Worker owns a local work-stealing deque.
@@ -54,7 +55,7 @@ func newWorker[T any](capacity int) Worker[T] {
 //   - ok == false: ( internal node ) the task only spawned children, nothing is emitted.
 //
 // T is the input type and R is the result type.
-type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result R, ok bool, err error)
+type Task[T, R any] func(ctx context.Context, workerId int, item T, spawn func(T)) (result R, ok bool, err error)
 
 // WorkerPool manages a collection of workers and schedules work between them.
 //
@@ -236,7 +237,8 @@ func (p *WorkerPool[T, R]) broadcastWakeup() {
 
 // runTask implements the actual task execution of a worker.
 func (p *WorkerPool[T, R]) runTask(spawn func(T),idx int, item T) error {
-	result, ok, err := p.execute(p.ctx, item, spawn)
+	// pass workerID to the task function so users can have arbitrary extra state per worker
+	result, ok, err := p.execute(p.ctx, idx, item, spawn)
 	if err != nil {
 		return err // errgroup records it and cancels egCtx for every worker
 	}
