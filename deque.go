@@ -62,8 +62,6 @@ func (a *circularArray[T]) resizeCopy(newCap int, from, to int64) *circularArray
 //   - Thieves work the top end (FIFO: Steal), racing each other, and resolved by CAS
 //   - Thieves only race for the owner's PopBottom for the very last element,
 //   - This race is resolved by a CAS by both the thief and the owner
-//
-// TODO: experminet with cache line padding
 type LFdeque[T any] struct {
 	top    atomic.Int64
 	bottom atomic.Int64
@@ -207,7 +205,7 @@ func (d *LFdeque[T]) Steal() (v T, ok bool) {
 //
 // The operation is thief-safe: any number of thieves may call StealHalf
 // concurrently, and it may also race with the owner's PushBottom/PopBottom.
-func (d *LFdeque[T]) StealHalf() (v []T, ok bool) {
+func (d *LFdeque[T]) StealHalf(scratch []T) (v []T, ok bool) {
 	t := d.top.Load()
 	b := d.bottom.Load()
 	half := (b - t) / 2
@@ -215,7 +213,7 @@ func (d *LFdeque[T]) StealHalf() (v []T, ok bool) {
 		return nil, false
 	}
 
-	buf := make([]T, 0, half)
+	buf := scratch[:0]
 	for range half {
 		curTop := d.top.Load()
 		curBottom := d.bottom.Load()
@@ -238,6 +236,7 @@ func (d *LFdeque[T]) StealHalf() (v []T, ok bool) {
 	return buf, true
 }
 
+// Snapshot of the length
 func (d *LFdeque[T]) Len() int64 {
 	return d.bottom.Load() - d.top.Load()
 }

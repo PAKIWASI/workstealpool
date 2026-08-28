@@ -133,12 +133,13 @@ func TestLFdeque_StealHalfExactSizes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(string(rune(tc.size)), func(t *testing.T) {
 			d := NewLFdeque[int](8)
+			scratch := make([]int, 4)
 
 			for i := 0; i < tc.size; i++ {
 				d.PushBottom(i)
 			}
 
-			got, ok := d.StealHalf()
+			got, ok := d.StealHalf(scratch)
 			read := len(got)
 
 			if tc.want == 0 {
@@ -182,6 +183,7 @@ func TestLFdeque_StealHalfExactSizes(t *testing.T) {
 
 func TestLFdeque_StealHalfMultipleBatches(t *testing.T) {
 	d := NewLFdeque[int](8)
+	scratch := make([]int, 4)
 
 	const n = 1024
 
@@ -192,7 +194,7 @@ func TestLFdeque_StealHalfMultipleBatches(t *testing.T) {
 	var got []int
 
 	for {
-		batch, ok := d.StealHalf()
+		batch, ok := d.StealHalf(scratch)
 		read := len(batch)
 		if !ok {
 			break
@@ -245,10 +247,11 @@ func TestLFdeque_StealHalfConcurrentThieves(t *testing.T) {
 
 	for range thieves {
 
+		scratch := make([]int, 4)
 		wg.Go(func() {
 
 			for {
-				values, ok := d.StealHalf()
+				values, ok := d.StealHalf(scratch)
 				if !ok {
 					return
 				}
@@ -329,10 +332,11 @@ func TestLFdeque_ConcurrentOwnerAndThieves(t *testing.T) {
 
 	for range thieves {
 
+		scratch := make([]int, 4)
 		wg.Go(func() {
 
 			for {
-				values, ok := d.StealHalf()
+				values, ok := d.StealHalf(scratch)
 				if !ok {
 					if d.Len() == 0 {
 						return
@@ -409,6 +413,7 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 			const initial = 10_000
 
 			d := NewLFdeque[int](8)
+			scratch := make([]int, 4)
 
 			for i := range initial {
 				d.PushBottom(i)
@@ -424,7 +429,7 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 				wg.Go(func() {
 
 					for {
-						values, ok := d.StealHalf()
+						values, ok := d.StealHalf(scratch)
 						if !ok {
 							if d.Len() == 0 {
 								return
@@ -491,6 +496,7 @@ func TestLFdeque_StealHalf_NoOverlapUnderOwnerContention(t *testing.T) {
 
 	for trial := range trials {
 		d := NewLFdeque[int](64)
+		scratch := make([]int, 32)
 		for i := range n {
 			d.PushBottom(i)
 		}
@@ -500,7 +506,7 @@ func TestLFdeque_StealHalf_NoOverlapUnderOwnerContention(t *testing.T) {
 
 		var wg sync.WaitGroup
 		wg.Go(func() {
-			vals, ok := d.StealHalf()
+			vals, ok := d.StealHalf(scratch)
 			if !ok {
 				return
 			}

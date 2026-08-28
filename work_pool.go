@@ -31,25 +31,25 @@ const maxStealAttemps = 50
 type Worker[T any] struct {
 	// this has to be ptr as you can't copy the internal atomic ints
 	deque *LFdeque[T]
+	// per worker scratch space, passed to StealHalf
+	scratch []T
 }
 
 func newWorker[T any](capacity int) Worker[T] {
-	return Worker[T]{deque: NewLFdeque[T](capacity)}
+	return Worker[T]{deque: NewLFdeque[T](capacity), scratch: make([]T, capacity/2)}
 }
 
 // Task is the unit of work a WorkerPool executes.
 //
 // ctx should be checked by long-running tasks that want to be interruptible.
-// spawn schedules a child item of work onto the calling worker's local deque;
-// it must only be called synchronously, from within this Task invocation.
+// spawn schedules a child item of work onto the calling worker's local deque
+// It must only be called synchronously, from within this Task invocation.
 //
 // The three return values encode three distinct outcomes:
-//   - err != nil: fatal — the pool cancels and records this as its terminal error.
-//   - ok == true: leaf — result is emitted on the results channel.
-//   - ok == false: internal node — the task only spawned children; nothing is emitted.
+//   - err != nil: fatal: the pool cancels and records this as its terminal error.
+//   - ok == true: leaf: result is emitted on the results channel.
+//   - ok == false: internal node: the task only spawned children, nothing is emitted.
 //
-// R is unconstrained (any), so it can be a value type, pointer, interface, or struct.
-// Returning by value avoids any forced heap allocation.
 // T is the input type and R is the result type.
 type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result R, ok bool, err error)
 
@@ -64,7 +64,7 @@ type WorkerPool[T, R any] struct {
 	execute Task[T, R]
 
 	// every parked worker wakes up when this cannel is closed
-	wakeup atomic.Pointer[chan struct{}]
+	wakeup atomic.Pointer[chan struct{}]	// TODO: use a generation counter + a single persistant sync.Cond-style wakup
 	// how many workers are currently parked
 	parked atomic.Int32
 
@@ -166,6 +166,13 @@ func (p *WorkerPool[T, R]) Wait() error {
 // if you run out, steal half from another worker, FIFO.
 func (p *WorkerPool[T, R]) runWorker(idx int) error {
 	w := p.workers[idx]
+
+	spawn := func(child T) {
+		p.pending.Add(1) // before push: must be visible before any thief can see the child
+		w.deque.PushBottom(child)
+		p.broadcastWakeup()
+	}
+
 	spins := 0
 	for {
 		select {
@@ -177,7 +184,7 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 		item, ok := w.deque.PopBottom()
 		if ok {
 			spins = 0
-			if err := p.runTask(idx, item); err != nil {
+			if err := p.runTask(spawn, idx, item); err != nil {
 				return err // some err occured while running the current task, abort
 			}
 			continue // task done, continue with the loop
@@ -225,15 +232,7 @@ func (p *WorkerPool[T, R]) broadcastWakeup() {
 }
 
 // runTask implements the actual task execution of a worker.
-func (p *WorkerPool[T, R]) runTask(idx int, item T) error {
-	w := p.workers[idx]
-
-	spawn := func(child T) {
-		p.pending.Add(1) // before push: must be visible before any thief can see the child
-		w.deque.PushBottom(child)
-		p.broadcastWakeup()
-	}
-
+func (p *WorkerPool[T, R]) runTask(spawn func(T),idx int, item T) error {
 	result, ok, err := p.execute(p.ctx, item, spawn)
 	if err != nil {
 		return err // errgroup records it and cancels egCtx for every worker
@@ -255,19 +254,20 @@ func (p *WorkerPool[T, R]) runTask(idx int, item T) error {
 // victim among the other workers in the pool. It tries up to len(workers)-1
 // distinct victims before giving up.
 func (p *WorkerPool[T, R]) StealHalf(thiefIdx int) (ok bool) {
+	thief := p.workers[thiefIdx]
 	if n := len(p.workers); n > 1 {
 		// Random start index, then scan forward so we don't retry the same
 		// victim twice and don't bias toward low-index workers.
-		start := rand.IntN(n)	// TODO: this escapes to heap??
+		start := rand.IntN(n) // TODO: this escapes to heap according to compiler optimisation details(flow: {heap} ← &{storage for "invalid argument to IntN"})
 
 		for i := range n {
 			idx := (start + i) % n
 			if idx == thiefIdx {
 				continue
 			}
-			v, okk := p.workers[idx].deque.StealHalf()
+			v, okk := p.workers[idx].deque.StealHalf(thief.scratch)
 			if okk {
-				p.workers[thiefIdx].deque.PushSliceBottom(v)
+				thief.deque.PushSliceBottom(v)
 				p.broadcastWakeup()
 				return true
 			}
