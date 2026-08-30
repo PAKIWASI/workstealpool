@@ -1,331 +1,116 @@
-# worksteal
+# workstealpool
 
-A lock-free work-stealing scheduler for recursive divide-and-conquer
-workloads in Go, implementing the Chase-Lev deque (Lê, Pop, Cohen &
-Nardelli, PPoPP 2013).
-
-- **`deque.go`** : `LFdeque[T]`, a growable, array-based work-stealing
-  deque. One owner goroutine pushes/pops from the bottom; any number of
-  thieves steal from the top.
-- **`work_pool.go`** : `WorkerPool[T, R]`, a pool of workers, each owning
-  one `LFdeque[T]`. Workers run local work LIFO and steal from other
-  workers' deques FIFO (in half-batches) when they run dry.
-- **`primecount.go`** : a divide-and-conquer prime-counting workload used
-  to exercise the pool end-to-end, and as the correctness/benchmark
-  harness for the rest of the package.
+A lock-free work-stealing pool for recursive divide-and-conquer workloads
+in Go (Chase-Lev deque, Lê/Pop/Cohen/Nardelli, PPoPP 2013). Each worker
+owns a deque, runs its own work LIFO, and steals half of a random
+victim's deque (FIFO) when it runs dry. So an unevenly-shaped task tree
+still balances itself across workers at runtime.
 
 ## Install
 
 ```
-go get github.com/PAKIWASI/work_steal_pool
+go get github.com/PAKIWASI/workstealpool
 ```
 
-## Usage
+## API
 
 ```go
-pool := worksteal.NewWorkerPool[T, R](ctx, poolSize, initialCap, resultBuf, task)
-pool.Submit(initialItem)
-for r := range pool.Run() {
-    // consume results as they arrive
-}
-if err := pool.Wait(); err != nil {
-    // first error from any worker
-}
+type Task[T, R any] func(ctx context.Context, workerID int, item T, spawn func(T)) (result R, ok bool, err error)
+
+func NewWorkerPool[T, R any](ctx context.Context, poolSize, initialWorkerCap, resultBuffSize int, execute Task[T, R]) *WorkerPool[T, R]
+func (p *WorkerPool[T, R]) Submit(item T)
+func (p *WorkerPool[T, R]) Run() <-chan R
+func (p *WorkerPool[T, R]) Wait() error
 ```
 
-A `Task[T, R]` either returns a result (leaf) or calls `spawn` to schedule
-more work of the same type onto the calling worker's own deque (internal
-node). See `primecount.go` for a worked example.
+- **`NewWorkerPool`** builds `poolSize` workers, each with an `LFdeque[T]`
+  of initial capacity `initialWorkerCap`, and a results channel buffered
+  to `resultBuffSize`. Workers don't start until `Run`.
+- **`Submit`** seeds the pool with the initial item(s), onto worker 0's
+  deque. Call before `Run`.
+- **`Run`** starts every worker and returns the results channel. It
+  closes once no work remains anywhere, or a task returns a fatal error.
+- **`Wait`** blocks until every worker has exited and returns the first
+  fatal error (nil on success). Safe to call while draining `Run()`'s
+  channel concurrently.
 
-## Writing a Task function
+### `Task`
+
+Every call to your `Task` is one node in the recursion tree:
+
+- **Leaf**: do the work, `return result, true, nil`. Emitted on the
+  results channel.
+- **Internal node**: call `spawn(child)` one or more times, `return
+  zero, false, nil`. Nothing emitted; children become new tree nodes.
+- **Fatal**: `return zero, false, err`. Aborts the whole pool; `Wait()`
+  reports it. Reserve this for real failures, not per-item conditions
+  (e.g. a permission-denied file mid-walk), fold those into `R` instead
+  and return them as a normal leaf result.
+
+**`workerID`** is the index (`0..poolSize-1`) of the worker currently
+running this call. It identifies which worker's local state to use for
+task-local scratch space.  A scratch buffer, a symlink-cycle stack,
+anything you don't want shared/synchronized across workers. Index your
+own `[]WorkerState` (sized `poolSize`, created alongside the pool) with
+it. It is **not** a call ID: the same `workerID` runs many `Task` calls
+over the pool's lifetime, sequentially, so state you key by it persists
+and must be treated as reused, not per-call.
+
+**`spawn`** must be called synchronously, from inside the `Task` call
+itself — it pushes onto the *calling worker's own* deque. Don't stash it
+or call it from another goroutine.
+
+**`ctx`** is cancelled once the pool is done (all work finished, or a
+fatal error). Long-running leaves should check it if they want to be
+interruptible.
+
+## Example
 
 ```go
-type Task[T, R any] func(ctx context.Context, item T, spawn func(T)) (result R, ok bool, err error)
-```
+type primeRange struct{ Lo, Hi int }
 
-Every call to your `Task` is one node in the recursion tree, and it returns three distinct signals:
-
-- **Leaf**: do the real work for `item` and return `(result, true, nil)`. The result is emitted to the results channel.
-- **Internal node**: decide `item` is still too big, call `spawn(child)` one or more times to hand off smaller pieces, and return `(zero, false, nil)`. Nothing is emitted.
-- **Fatal error**: return `(zero, false, err)`. The pool aborts and `Wait()` reports this error.
-
-Because `R` is returned by value without indirection (`*R`), `R` can be any type (struct, pointer, interface, or scalar) without forcing a heap allocation for leaf returns.
-
-Worked example, from `primecount.go` (bisect a range until it's small
-enough to count directly):
-
-```go
 func countPrimesTask(threshold int) Task[primeRange, int] {
-    return func(ctx context.Context, item primeRange, spawn func(primeRange)) (int, bool, error) {
+    return func(ctx context.Context, workerID int, item primeRange, spawn func(primeRange)) (int, bool, error) {
         width := item.Hi - item.Lo
         if width <= threshold {
-            // Leaf: do the real work, return a result.
-            count := countPrimesSequential(item.Lo, item.Hi)
-            return count, true, nil
+            return countPrimesSequential(item.Lo, item.Hi), true, nil
         }
-
-        // Internal node: split and hand off both halves.
         mid := item.Lo + width/2
-        spawn(primeRange{Lo: item.Lo, Hi: mid})
-        spawn(primeRange{Lo: mid, Hi: item.Hi})
+        spawn(primeRange{item.Lo, mid})
+        spawn(primeRange{mid, item.Hi})
         return 0, false, nil
     }
 }
-```
 
-Rules to keep in mind:
+pool := NewWorkerPool[primeRange, int](ctx, poolSize, initialCap, resultBuf, countPrimesTask(threshold))
+pool.Submit(primeRange{lo, hi})
 
-- **Call `spawn` synchronously, from inside the `Task` call itself.**
-  It schedules onto the *calling worker's own* deque — don't stash it and
-  call it later, or call it from another goroutine.
-- **Every result you want must come from a `return result, true, nil`**, not
-  from a side channel. The pool collects results only through the return
-  value; combining/summing them (like the range-counting loop in
-  `CountPrimesParallel`) is the caller's job after draining `Run()`, not
-  the task tree's.
-- **Return a non-nil `error` to abort the whole pool.** The first error
-  from any worker cancels every other worker and is what `Wait()` returns
-  — don't use it for expected/recoverable conditions, only real failures.
-- **Check `ctx` in long-running leaf work** if you want it to be
-  interruptible when the pool cancels (e.g. after another worker errors).
-  Cheap leaves (like `countPrimesSequential` here) usually don't need to.
-- **Pick a leaf-size threshold deliberately** — see Performance below.
-  Too fine and CAS/spawn overhead dominates; too coarse and there isn't
-  enough work to steal.
-
-## User control over discovered work: recoverable vs. fatal errors
-
-`Task`'s `error` return is intentionally blunt: any non-nil error is
-treated as *the* failure, cancels every other worker, and is what
-`Wait()` returns. That's the right behavior for "the pool itself broke,"
-and the wrong behavior for "this one item didn't work out." Those are
-different situations and the pool only gives you a tool for the first
-one — the second is on you to build, using the result type.
-
-A directory walker is the clearest example. Walking a tree with
-`spawn(subdir)` per directory, you *will* hit `EACCES` on some
-subdirectory somewhere. Returning that from `Task` as `error` would
-cancel the entire walk over one unreadable folder, which is almost never
-what you want.
-
-Instead, fold expected, recoverable failures into `R` and return `(result, true, nil)`:
-
-```go
-type WalkResult struct {
-    Path string
-    Info os.FileInfo // nil if Err != nil
-    Err  error        // non-nil = recoverable per-item failure
+total := 0
+for count := range pool.Run() {
+    total += count
 }
-
-func walkTask(ctx context.Context, dir string, spawn func(string)) (WalkResult, bool, error) {
-    entries, err := os.ReadDir(dir)
-    if err != nil {
-        if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
-            // Expected: report it as a leaf result, don't abort the pool.
-            return WalkResult{Path: dir, Err: err}, true, nil
-        }
-        // Unexpected (corrupted mount, unusual I/O failure, ...): abort.
-        return WalkResult{}, false, err
-    }
-
-    for _, e := range entries {
-        spawn(filepath.Join(dir, e.Name()))
-    }
-    return WalkResult{Path: dir}, true, nil
+if err := pool.Wait(); err != nil {
+    // handle
 }
 ```
 
-The consumer sorts results after draining `Run()`, the same way
-`CountPrimesParallel` sums leaf counts:
+See `primecount.go` for the full worked example.
 
-```go
-for r := range pool.Run() {
-    if r.Err != nil {
-        denied = append(denied, r) // collect, log, retry later — your call
-        continue
-    }
-    files = append(files, r)
-}
-```
+## When this is (and isn't) a good fit
 
-Guidelines this generalizes to:
-
-- **Use `errors.Is`/sentinel checks inside the `Task` to classify an
-  error**, not the pool. `WorkerPool` doesn't know or care what
-  `fs.ErrPermission` is — keeping that judgment call in your `Task`
-  keeps the scheduler generic instead of leaking walker-specific
-  semantics into it.
-- **Recoverable failures are data, not control flow.** They travel out
-  through `return result, true, nil`, same as any other leaf value, because
-  results are the only per-item channel out of the pool.
-- **Reserve `return zero, false, err` for the true first case**: something the
-  running `Task` can't classify or recover from, where continuing to
-  process other items isn't safe or meaningful (out of file descriptors,
-  a bug, a context you should have checked but didn't). That's the one
-  bucket the pool will actually abort everything for.
-- **A zero-value `R` isn't the same as an error.** If `R` is a plain
-  struct like `WalkResult` above, callers should check `Err` first, not
-  infer failure from a nil/zero field — nothing in the pool enforces
-  that convention for you, it's a discipline you're opting into on the
-  result type.
-
-## What this is useful for
-
-This pool is built for one specific shape of problem: recursive
-divide-and-conquer work where you *don't know the shape of the tree up
-front* — each item, once you look at it, may produce more items, and the
-resulting subtrees can be wildly uneven in size. That's exactly the case
-a fixed, evenly-partitioned worker pool handles badly: partition a lopsided
-tree evenly across N workers up front and some of them finish early and
-sit idle while one worker is still chewing through the big branch. Work
-stealing fixes that by letting idle workers pull work from busy ones at
-runtime, so load balances itself regardless of how the tree turns out.
-
-Good fits:
-- **Parallel recursive sorts** — quicksort/mergesort, where partitions
-  split unevenly depending on the data.
-- **Tree/graph search** — game tree search (e.g. alpha-beta), N-Queens,
-  puzzle solvers, where branches prune to very different depths.
-- **Recursive numeric subdivision** — this repo's own prime-counting
-  example: bisect a range, recurse until small enough, sum leaf results.
-- **Spatial/recursive structures** — ray tracing scene traversal, k-d
-  tree or octree construction and queries, fractal rendering.
-
-Poor fits:
-- **Uniform, embarrassingly parallel batches** (e.g. "resize these 10,000
-  images") — the work is already evenly sized and known up front, so a
-  plain fixed-size worker pool with a shared channel is simpler and just
-  as fast; there's nothing to steal because there's no imbalance.
-- **I/O-bound work** — stealing balances *CPU* work across cores; a
-  blocked-on-network task doesn't benefit from a lock-free deque, use a
-  bounded goroutine pool or semaphore instead.
-- **Work that must be processed in order** — `Run()`'s results arrive as
-  leaves finish, not in submission order.
-
-## How it works
-
-Each worker pops its own deque LIFO (cache-friendly, and it means a
-worker keeps working on the subtree it just spawned rather than jumping
-around). When a worker's deque empties, it steals *half* of a random
-victim's deque from the top (FIFO), amortizing the cost of a steal over
-many items instead of stealing one item at a time. Workers spin briefly
-on a failed steal, then park until woken by a `PushBottom`/spawn
-elsewhere in the pool.
-
-## Performance
-
-Full suite (`go test ./...`) passes, including the concurrent
-owner/thief/parking tests. Benchmarks below are from
-`go test -bench=. -benchmem`, run on:
-
-```
-CPU:    11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
-Cores:  4 physical cores, 8 threads (GOMAXPROCS=8)
-GOOS/GOARCH: linux/amd64
-```
-
-### Deque primitives (`LFdeque`, uncontended and contended)
-
-```
-PushBottom              46.14 ns/op    0 B/op   0 allocs/op
-PopBottom               31.31 ns/op    0 B/op   0 allocs/op
-Steal                   25.61 ns/op    0 B/op   0 allocs/op
-StealHalf (from 1024)  6224    ns/op  682 B/op   0 allocs/op   (~1000 elements/steal)
-
-ConcurrentSteal, 1024 pre-filled, N thieves racing for them concurrently:
-  thieves=1    19.63 ns/op
-  thieves=2    19.65 ns/op
-  thieves=4    19.66 ns/op
-  thieves=8    19.63 ns/op
-  thieves=16   19.74 ns/op
-```
-
-The concurrent-steal number is the one worth noting: per-steal cost is
-**flat from 1 to 16 concurrent thieves** (19.6–19.7 ns/op throughout).
-That's the lock-free deque doing its job — thieves aren't queueing up
-behind each other or degrading under contention, each `Steal` call costs
-the same regardless of how many other goroutines are hammering the same
-deque at once.
-
-### Full workload: threshold (leaf granularity) is the dominant knob
-
-Counting primes below 200,000, pool size 8, sweeping leaf-size threshold:
-
-```
-threshold=1        94,972,866 ns/op  14,508,950 B/op  602,791 allocs/op
-threshold=10       20,260,268 ns/op   2,392,607 B/op   99,196 allocs/op
-threshold=50        4,795,156 ns/op     309,412 B/op   12,630 allocs/op
-threshold=200       3,287,177 ns/op      83,704 B/op    3,260 allocs/op
-threshold=1,000     3,043,703 ns/op      26,275 B/op      875 allocs/op   ← fastest
-threshold=5,000     3,134,107 ns/op      11,624 B/op      266 allocs/op
-threshold=200,000  12,998,140 ns/op       6,656 B/op       57 allocs/op   (1 leaf, no stealing)
-sequential baseline 12,199,920 ns/op          0 B/op        0 allocs/op
-```
-
-Threshold=1 is **~31x slower** than the threshold=1,000 sweet spot here,
-almost entirely from spawn/steal/CAS bookkeeping (600k+ allocations vs.
-875) rather than real work — bisecting to single numbers generates far
-more tree nodes than the leaf work justifies. At the other extreme,
-threshold=200,000 forces a single leaf with zero parallelism, landing
-right back near the sequential baseline. The best threshold sits where
-leaves are cheap enough to steal in useful chunks but not so fine that
-overhead swamps the work — sweep it for your own workload, this number
-won't transfer directly.
-
-### Pool size: speedup tracks physical core count, then plateaus
-
-Same workload, threshold fixed at 500:
-
-```
-workers=1   12,503,690 ns/op   (1.0x — pool overhead roughly cancels out vs. sequential)
-workers=2    6,778,972 ns/op   (1.8x)
-workers=4    4,142,564 ns/op   (2.9x)
-workers=8    3,100,820 ns/op   (3.9x)
-workers=16   3,051,032 ns/op   (4.0x — no further gain)
-workers=32   3,145,615 ns/op   (3.9x — slightly worse: oversubscription)
-```
-
-Speedup climbs cleanly through the physical core count (4) and continues
-a bit further into hyperthreading territory, then **flattens right around
-8 workers** — this CPU's thread count — and going well past that
-(32 workers) costs a little rather than gaining anything, from scheduling
-more goroutines than there's parallelism to run them. Matching pool size
-to `runtime.NumCPU()` (or close to it) is the right default; there's
-rarely a reason to go far beyond your thread count.
-
-### Threshold × pool size interact
-
-`PoolSizeXThreshold` makes the interaction explicit: at a too-fine
-threshold (20), more workers barely help (17.4ms → 11.5ms → 12.6ms
-going 1 → 4 → 16 workers, actually *regressing* at 16) because the
-bottleneck is per-node overhead, not available parallelism. At a
-reasonable threshold (500), the same pool-size increase scales cleanly
-(12.6ms → 4.1ms → 3.1ms). Tuning one without the other leaves
-performance on the table either way.
-
-### Pool size, deque capacity, result buffer — mostly a memory knob past a point
-
-Deque capacity and result-buffer size had a much smaller effect than
-threshold or pool size on this workload. A few hundred µs across the
-whole sweep — but memory scales directly with whatever you ask for
-(e.g. `InitialWorkerCap=512` uses ~107 KB/op vs. ~43 KB/op at the
-default), so oversizing them costs memory for little to no speed benefit
-once they're past the point of avoiding resize churn.
-
-`BenchmarkCountPrimes_PoolSize`, `_InitialWorkerCap`, `_ResultBuffSize`,
-`_Threshold`, and `_PoolSizeXThreshold` in `primecount_bench_test.go`
-sweep all of the above; rerun them on your target hardware and workload
-before picking production values — these numbers are a starting point,
-not a guarantee.
+Good fit: quicksort/mergesort, tree/graph search, recursive numeric
+subdivision, anything where you don't know the shape of the work
+upfront and it can spawn more of itself. Bad fit: uniformly-sized batches
+(nothing to steal) or I/O-bound work (stealing balances CPU, not
+blocking calls).
 
 ## Testing
 
 ```
-go test ./...            # normal run
-go test -race ./...      # may intermittently report the known race below;
-                          # any other race, or a wrong count/value, is a real bug
-go test -bench=. ./...   # benchmarks sweep pool size, deque cap, result
-                          # buffer size, leaf threshold, and range size
+go test ./...
+go test -race ./...   # occasionally flags a known-benign race in
+                       # LFdeque.Steal vs PushBottom — see deque.go
+go test -bench=. ./...
 ```
 
 ## Known limitation: benign race under `-race`
@@ -334,11 +119,11 @@ Running the tests with `-race` will occasionally report a race between
 `LFdeque.PushBottom`'s array write and `LFdeque.Steal`/`StealHalf`'s array
 read (`deque.go`). This is **expected** and does not affect correctness.
 
-`Steal` reads the array slot *before* CASing `top` to claim it — matching
+`Steal` reads the array slot *before* CASing `top` to claim it, matching
 the Chase-Lev paper. If the CAS fails (a thief lost the race), the value
 it just read is discarded via `ok == false`, but the read itself already
 happened, unsynchronized, against whatever the owner does next. So a
-losing thief's read is a genuine data race on paper — the value can even
+losing thief's read is a genuine data race on paper, the value can even
 be torn for multi-word `T`, but since it's always thrown away, no caller
 ever observes it. `-race` is correctly flagging an unsynchronized access,
 not producing a false positive; it's just one that provably can't corrupt
@@ -347,7 +132,7 @@ a result.
 Two real fixes exist if you're adapting this for production, neither
 implemented here on purpose: **boxing** each element as
 `atomic.Pointer[T]` (real atomic access, costs one allocation per push),
-or **epoch/hazard-pointer reclamation** (will attempt this)
+or **epoch/hazard-pointer reclamation** (will attempt this).
 
 `TestCountPrimesParallel_MatchesSequential` and
 `TestCountPrimesParallel_Repeated` are the tests most likely to trigger

@@ -413,7 +413,6 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 			const initial = 10_000
 
 			d := NewLFdeque[int](8)
-			scratch := make([]int, 4)
 
 			for i := range initial {
 				d.PushBottom(i)
@@ -425,9 +424,8 @@ func TestLFdeque_WorkloadRatios(t *testing.T) {
 			var wg sync.WaitGroup
 
 			for i := 0; i < tc.thieves; i++ {
-
+				scratch := make([]int, 4)
 				wg.Go(func() {
-
 					for {
 						values, ok := d.StealHalf(scratch)
 						if !ok {
