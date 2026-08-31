@@ -64,7 +64,7 @@ func countPrimesSequential(lo, hi int) int {
 // spawning both halves, until a range is <= threshold wide, at which point
 // it counts that range sequentially and returns the count as a leaf result.
 func countPrimesTask(threshold int) Task[primeRange, int] {
-	return func(ctx context.Context, workerID int, item primeRange, spawn func(primeRange)) (int, bool, error) {
+	return func(ctx context.Context, workerID int, item primeRange, spawn func(...primeRange)) (int, bool, error) {
 		width := item.Hi - item.Lo
 		if width <= threshold {
 			count := countPrimesSequential(item.Lo, item.Hi)
@@ -72,8 +72,7 @@ func countPrimesTask(threshold int) Task[primeRange, int] {
 		}
 
 		mid := item.Lo + width/2
-		spawn(primeRange{Lo: item.Lo, Hi: mid})
-		spawn(primeRange{Lo: mid, Hi: item.Hi})
+		spawn(primeRange{Lo: item.Lo, Hi: mid}, primeRange{Lo: mid, Hi: item.Hi})
 		return 0, false, nil
 	}
 }

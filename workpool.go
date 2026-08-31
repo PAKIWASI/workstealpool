@@ -38,7 +38,7 @@ type Worker[T any] struct {
 
 func newWorker[T any](capacity int) Worker[T] {
 	return Worker[T]{
-		deque: NewLFdeque[T](capacity),
+		deque:   NewLFdeque[T](capacity),
 		scratch: make([]T, capacity/2),
 	}
 }
@@ -55,7 +55,7 @@ func newWorker[T any](capacity int) Worker[T] {
 //   - ok == false: ( internal node ) the task only spawned children, nothing is emitted.
 //
 // T is the input type and R is the result type.
-type Task[T, R any] func(ctx context.Context, workerId int, item T, spawn func(T)) (result R, ok bool, err error)
+type Task[T, R any] func(ctx context.Context, workerId int, item T, spawn func(...T)) (result R, ok bool, err error)
 
 // WorkerPool manages a collection of workers and schedules work between them.
 //
@@ -68,7 +68,7 @@ type WorkerPool[T, R any] struct {
 	execute Task[T, R]
 
 	// every parked worker wakes up when this cannel is closed
-	wakeup atomic.Pointer[chan struct{}]   // TODO: use a generation counter + a single persistant sync.Cond-style wakup
+	wakeup atomic.Pointer[chan struct{}]
 	// how many workers are currently parked
 	parked atomic.Int32
 
@@ -171,9 +171,18 @@ func (p *WorkerPool[T, R]) Wait() error {
 func (p *WorkerPool[T, R]) runWorker(idx int) error {
 	w := p.workers[idx]
 
-	spawn := func(child T) {
-		p.pending.Add(1) // before push: must be visible before any thief can see the child
-		w.deque.PushBottom(child)
+	spawn := func(child ...T) {
+		n := len(child)
+		if n == 0 {
+			return
+		}
+		if n == 1 {
+			p.pending.Add(1) // before push: must be visible before any thief can see the child
+			w.deque.PushBottom(child[0])
+		} else {
+			p.pending.Add(int64(n))
+			w.deque.PushSliceBottom(child)
+		}
 		p.broadcastWakeup()
 	}
 
@@ -217,26 +226,26 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 // parkUntilWork blocks the worker with id `idx` and adds it to a waiting list.
 // whenever more work is added by any worker, all workers on the list are awaken
 func (p *WorkerPool[T, R]) parkUntilWork() {
-    p.parked.Add(1)
-    defer p.parked.Add(-1)
-    ch := *p.wakeup.Load()
-    select {
-    case <-p.ctx.Done():
-    case <-ch:
-    }
+	p.parked.Add(1)
+	defer p.parked.Add(-1)
+	ch := *p.wakeup.Load()
+	select {
+	case <-p.ctx.Done():
+	case <-ch:
+	}
 }
 
 func (p *WorkerPool[T, R]) broadcastWakeup() {
-    if p.parked.Load() == 0 {
-        return
-    }
-    newCh := make(chan struct{})
-    old := p.wakeup.Swap(&newCh)
-    close(*old)
+	if p.parked.Load() == 0 {
+		return
+	}
+	newCh := make(chan struct{})
+	old := p.wakeup.Swap(&newCh)
+	close(*old)
 }
 
 // runTask implements the actual task execution of a worker.
-func (p *WorkerPool[T, R]) runTask(spawn func(T),idx int, item T) error {
+func (p *WorkerPool[T, R]) runTask(spawn func(...T), idx int, item T) error {
 	// pass workerID to the task function so users can have arbitrary extra state per worker
 	result, ok, err := p.execute(p.ctx, idx, item, spawn)
 	if err != nil {
