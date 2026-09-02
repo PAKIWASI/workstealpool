@@ -18,7 +18,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// TODO: should this be configurable?
 const maxStealAttemps = 50
 
 // Worker owns a local work-stealing deque.
@@ -283,7 +282,7 @@ func (p *WorkerPool[T, R]) StealHalf(thiefIdx int) (ok bool) {
 	if n := len(p.workers); n > 1 {
 		// Random start index, then scan forward so we don't retry the same
 		// victim twice and don't bias toward low-index workers.
-		start := rand.IntN(n) // TODO: this escapes to heap according to compiler optimisation details(flow: {heap} ← &{storage for "invalid argument to IntN"})
+		start := rand.IntN(n)
 
 		for i := range n {
 			idx := (start + i) % n
