@@ -5,6 +5,83 @@ import (
 	"testing"
 )
 
+// primeRange is the unit of work for prime counting tests: [Lo, Hi).
+type primeRange struct {
+	Lo, Hi int
+}
+
+func isPrime(n int) bool {
+	if n < 2 {
+		return false
+	}
+	if n%2 == 0 {
+		return n == 2
+	}
+	for d := 3; d*d <= n; d += 2 {
+		if n%d == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func countPrimesSequential(lo, hi int) int {
+	count := 0
+	for n := lo; n < hi; n++ {
+		if isPrime(n) {
+			count++
+		}
+	}
+	return count
+}
+
+func countPrimesTask(threshold int) Task[primeRange, int] {
+	return func(ctx context.Context, workerID int, item primeRange, res chan<- int, spawn func(...primeRange)) error {
+		width := item.Hi - item.Lo
+		if width <= threshold {
+			count := countPrimesSequential(item.Lo, item.Hi)
+			res <- count
+			return nil
+		}
+
+		mid := item.Lo + width/2
+		spawn(primeRange{Lo: item.Lo, Hi: mid}, primeRange{Lo: mid, Hi: item.Hi})
+		return nil
+	}
+}
+
+type poolConfig struct {
+	PoolSize         int
+	InitialWorkerCap int
+	ResultBuffSize   int
+	Threshold        int
+}
+
+func countPrimesParallel(ctx context.Context, lo, hi int, cfg poolConfig) (int, error) {
+	pool := NewWorkerPool[primeRange, int](
+		ctx,
+		cfg.PoolSize,
+		cfg.InitialWorkerCap,
+		cfg.ResultBuffSize,
+		countPrimesTask(cfg.Threshold),
+	)
+
+	pool.Submit(primeRange{Lo: lo, Hi: hi})
+
+	results := pool.Run()
+
+	total := 0
+	for r := range results {
+		total += r
+	}
+
+	if err := pool.Wait(); err != nil {
+		return 0, err
+	}
+
+	return total, nil
+}
+
 func TestCountPrimesSequential_KnownValues(t *testing.T) {
 	// pi(n): number of primes below n, from standard tables.
 	tests := []struct {
@@ -46,12 +123,12 @@ func TestCountPrimesParallel_MatchesSequential(t *testing.T) {
 
 	for _, cfg := range configs {
 		t.Run("", func(t *testing.T) {
-			got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
+			got, err := countPrimesParallel(context.Background(), lo, hi, cfg)
 			if err != nil {
-				t.Fatalf("CountPrimesParallel(%+v) error: %v", cfg, err)
+				t.Fatalf("countPrimesParallel(%+v) error: %v", cfg, err)
 			}
 			if got != want {
-				t.Fatalf("CountPrimesParallel(%+v) = %d, want %d", cfg, got, want)
+				t.Fatalf("countPrimesParallel(%+v) = %d, want %d", cfg, got, want)
 			}
 		})
 	}
@@ -59,12 +136,12 @@ func TestCountPrimesParallel_MatchesSequential(t *testing.T) {
 
 func TestCountPrimesParallel_EmptyRange(t *testing.T) {
 	cfg := poolConfig{PoolSize: 4, InitialWorkerCap: 8, ResultBuffSize: 4, Threshold: 100}
-	got, err := CountPrimesParallel(context.Background(), 10, 10, cfg)
+	got, err := countPrimesParallel(context.Background(), 10, 10, cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != 0 {
-		t.Fatalf("CountPrimesParallel on empty range = %d, want 0", got)
+		t.Fatalf("countPrimesParallel on empty range = %d, want 0", got)
 	}
 }
 
@@ -76,7 +153,7 @@ func TestCountPrimesParallel_SingleWorker(t *testing.T) {
 	want := countPrimesSequential(lo, hi)
 
 	cfg := poolConfig{PoolSize: 1, InitialWorkerCap: 2, ResultBuffSize: 1, Threshold: 37}
-	got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
+	got, err := countPrimesParallel(context.Background(), lo, hi, cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +169,7 @@ func TestCountPrimesParallel_ThresholdOfOne(t *testing.T) {
 	want := countPrimesSequential(lo, hi)
 
 	cfg := poolConfig{PoolSize: 8, InitialWorkerCap: 8, ResultBuffSize: 32, Threshold: 1}
-	got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
+	got, err := countPrimesParallel(context.Background(), lo, hi, cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,7 +191,7 @@ func TestCountPrimesParallel_Repeated(t *testing.T) {
 	cfg := poolConfig{PoolSize: 6, InitialWorkerCap: 4, ResultBuffSize: 8, Threshold: 23}
 
 	for i := range 50 {
-		got, err := CountPrimesParallel(context.Background(), lo, hi, cfg)
+		got, err := countPrimesParallel(context.Background(), lo, hi, cfg)
 		if err != nil {
 			t.Fatalf("run %d: unexpected error: %v", i, err)
 		}

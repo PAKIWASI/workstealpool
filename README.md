@@ -90,7 +90,7 @@ if err := pool.Wait(); err != nil {
 }
 ```
 
-See `primecount.go` for the full worked example.
+See `primecount_test.go` for the full worked example.
 
 ## When this is (and isn't) a good fit
 

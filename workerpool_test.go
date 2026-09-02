@@ -21,7 +21,7 @@ func TestWorkerPool_ParkingUnderLightLoad(t *testing.T) {
 		var got int
 		var err error
 		go func() {
-			got, err = CountPrimesParallel(context.Background(), 0, 3000, cfg)
+			got, err = countPrimesParallel(context.Background(), 0, 3000, cfg)
 			close(done)
 		}()
 

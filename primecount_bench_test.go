@@ -21,7 +21,7 @@ func runCountPrimes(b *testing.B, cfg poolConfig) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := CountPrimesParallel(ctx, 0, benchRangeHi, cfg); err != nil {
+		if _, err := countPrimesParallel(ctx, 0, benchRangeHi, cfg); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -141,7 +141,7 @@ func BenchmarkCountPrimes_RangeSize(b *testing.B) {
 			ctx := context.Background()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := CountPrimesParallel(ctx, 0, hi, cfg); err != nil {
+				if _, err := countPrimesParallel(ctx, 0, hi, cfg); err != nil {
 					b.Fatal(err)
 				}
 			}
