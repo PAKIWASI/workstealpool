@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const maxStealAttemps = 50
+const maxStealAttempts = 50
 
 // Worker owns a local work-stealing deque.
 //
@@ -45,16 +45,13 @@ func newWorker[T any](capacity int) Worker[T] {
 // Task is the unit of work a WorkerPool executes.
 //
 // ctx should be checked by long-running tasks that want to be interruptible.
-// spawn schedules a child item of work onto the calling worker's local deque
+// spawn schedules child items of work onto the calling worker's local deque.
 // It must only be called synchronously, from within this Task invocation.
 //
-// The three return values encode three distinct outcomes:
-//   - err != nil: ( fatal ) the pool cancels and records this as its terminal error.
-//   - ok == true: ( leaf ) result is emitted on the results channel.
-//   - ok == false: ( internal node ) the task only spawned children, nothing is emitted.
+// res is the write-only results channel where leaf results can be emitted.
 //
+// Returning a non-nil error aborts the pool and records it as the terminal error.
 // T is the input type and R is the result type.
-// type Task[T, R any] func(ctx context.Context, workerId int, item T, spawn func(...T)) (result R, ok bool, err error)
 type Task[T, R any] func(ctx context.Context, workerId int, item T, res chan<- R, spawn func(...T)) error
 
 // WorkerPool manages a collection of workers and schedules work between them.
@@ -67,7 +64,7 @@ type WorkerPool[T, R any] struct {
 	workers []Worker[T]
 	execute Task[T, R]
 
-	// every parked worker wakes up when this cannel is closed
+	// every parked worker wakes up when this channel is closed
 	wakeup atomic.Pointer[chan struct{}]
 	// how many workers are currently parked
 	parked atomic.Int32
@@ -125,13 +122,14 @@ func NewWorkerPool[T, R any](
 	return p
 }
 
-// Submit adds initial work to the pool. Call before Run
+// Submit adds initial work to the pool. Call before Run.
 // Submit does not itself start any workers.
 func (p *WorkerPool[T, R]) Submit(item T) {
 	p.pending.Add(1)
 	p.workers[0].deque.PushBottom(item)
 }
 
+// SubmitN adds multiple initial work items to the pool. Call before Run.
 func (p *WorkerPool[T, R]) SubmitN(items ...T) {
 	n := len(items)
 	if n == 0 {
@@ -157,7 +155,7 @@ func (p *WorkerPool[T, R]) Run() <-chan R {
 	// if any worker returns a non-nil error, errgroup cancels this new p.ctx
 	// automatically and remembers that error as the one Wait() will report.
 	for i := range p.workers {
-		// lauch all workers as errgroup goroutines
+		// launch all workers as errgroup goroutines
 		p.eg.Go(func() error {
 			return p.runWorker(i)
 		})
@@ -179,7 +177,7 @@ func (p *WorkerPool[T, R]) Wait() error {
 	return p.eg.Wait() // errgroup.Wait is safe to call more than once
 }
 
-// runWorker implements the worker loop: get LIFO work from it's own deque.
+// runWorker implements the worker loop: get LIFO work from its own deque.
 // if you run out, steal half from another worker, FIFO.
 func (p *WorkerPool[T, R]) runWorker(idx int) error {
 	w := p.workers[idx]
@@ -211,7 +209,7 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 		if ok {
 			spins = 0
 			if err := p.runTask(spawn, idx, item); err != nil {
-				return err // some err occured while running the current task, abort
+				return err // some err occurred while running the current task, abort
 			}
 			continue // task done, continue with the loop
 		}
@@ -224,7 +222,7 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 		// steal failed, spin block for some loops then park
 
 		spins++
-		if spins < maxStealAttemps {
+		if spins < maxStealAttempts {
 			// put this goroutine at the back of the queue but don't suspend it
 			runtime.Gosched()
 			continue // still within budget
@@ -237,7 +235,7 @@ func (p *WorkerPool[T, R]) runWorker(idx int) error {
 }
 
 // parkUntilWork blocks the worker with id `idx` and adds it to a waiting list.
-// whenever more work is added by any worker, all workers on the list are awaken
+// whenever more work is added by any worker, all workers on the list are awakened
 func (p *WorkerPool[T, R]) parkUntilWork() {
 	p.parked.Add(1)
 	defer p.parked.Add(-1)

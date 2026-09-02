@@ -15,7 +15,7 @@ import (
 
 const minCap = 8
 
-// circularArray is an no-push-after-publish ring buffer snapshot.
+// circularArray is a no-push-after-publish ring buffer snapshot.
 // Once a *circularArray is stored into LFdeque.array, its contents at
 // any index a thief might read are never mutated again. A retired array is never modified again.
 // Only the owner writes into it, and only at the current "bottom" slot, before
@@ -53,9 +53,9 @@ func (a *circularArray[T]) resizeCopy(newCap int, from, to int64) *circularArray
 
 // LFdeque is a lock-free double-ended queue.
 //
-//   - top and bottom are ever-increasing int64 counters
+//   - top and bottom are ever-increasing int64 counters;
 //     indices into the backing array are always `counter % cap`.
-//   - The invarient is `top <= bottom `and the size is just `bottom - top`
+//   - The invariant is `top <= bottom` and the size is just `bottom - top`.
 //   - Because they only ever increase, there is no ABA problem on the CAS
 //     below: a value top once held can never recur later.
 //   - The owner works the bottom end (LIFO: PushBottom/PopBottom).
@@ -104,7 +104,7 @@ func (d *LFdeque[T]) PushSliceBottom(v []T) {
 	a := d.array.Load()
 
 	if b-t+sliceLen >= a.cap() {
-		// grow with atleast enough size to house sliceLen
+		// grow with at least enough size to house sliceLen
 		a = a.resizeCopy(int(a.cap()*2+sliceLen), t, b)
 		d.array.Store(a)
 	}
@@ -186,7 +186,7 @@ func (d *LFdeque[T]) Steal() (v T, ok bool) {
 	a := d.array.Load()
 	// get the value BEFORE seeing if it's a valid steal.
 	// so that if the steal is valid, you already have the value and
-	// you don't potentially get another value written betweeen your CAS
+	// you don't potentially get another value written between your CAS
 	// and the a.get(). If steal is invalid, you just discard the value
 	v = a.get(t)
 

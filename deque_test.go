@@ -539,15 +539,24 @@ func TestLFdeque_StealHalf_NoOverlapUnderOwnerContention(t *testing.T) {
 	}
 }
 
-// TODO:
 func TestLFdeque_PushSliceBottom(t *testing.T) {
-	tests := []struct {
-		name string
-		v int
-	}{
+	d := NewLFdeque[int](4)
+
+	items := []int{10, 20, 30, 40, 50}
+	d.PushSliceBottom(items)
+
+	if got := d.Len(); got != int64(len(items)) {
+		t.Fatalf("Len() = %d, want %d", got, len(items))
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-		})
+
+	for i := len(items) - 1; i >= 0; i-- {
+		got, ok := d.PopBottom()
+		if !ok || got != items[i] {
+			t.Fatalf("PopBottom() = (%d, %v), want (%d, true)", got, ok, items[i])
+		}
+	}
+
+	if _, ok := d.PopBottom(); ok {
+		t.Fatal("PopBottom() succeeded on empty deque")
 	}
 }

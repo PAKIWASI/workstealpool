@@ -8,17 +8,18 @@ still balances itself across workers at runtime.
 
 ## Install
 
-```
+```bash
 go get github.com/PAKIWASI/workstealpool
 ```
 
 ## API
 
 ```go
-type Task[T, R any] func(ctx context.Context, workerID int, item T, spawn func(T)) (result R, ok bool, err error)
+type Task[T, R any] func(ctx context.Context, workerId int, item T, res chan<- R, spawn func(...T)) error
 
 func NewWorkerPool[T, R any](ctx context.Context, poolSize, initialWorkerCap, resultBuffSize int, execute Task[T, R]) *WorkerPool[T, R]
 func (p *WorkerPool[T, R]) Submit(item T)
+func (p *WorkerPool[T, R]) SubmitN(items ...T)
 func (p *WorkerPool[T, R]) Run() <-chan R
 func (p *WorkerPool[T, R]) Wait() error
 ```
@@ -26,8 +27,8 @@ func (p *WorkerPool[T, R]) Wait() error
 - **`NewWorkerPool`** builds `poolSize` workers, each with an `LFdeque[T]`
   of initial capacity `initialWorkerCap`, and a results channel buffered
   to `resultBuffSize`. Workers don't start until `Run`.
-- **`Submit`** seeds the pool with the initial item(s), onto worker 0's
-  deque. Call before `Run`.
+- **`Submit`** seeds the pool with an initial item onto worker 0's deque.
+  **`SubmitN`** seeds multiple initial items. Call before `Run`.
 - **`Run`** starts every worker and returns the results channel. It
   closes once no work remains anywhere, or a task returns a fatal error.
 - **`Wait`** blocks until every worker has exited and returns the first
@@ -38,19 +39,14 @@ func (p *WorkerPool[T, R]) Wait() error
 
 Every call to your `Task` is one node in the recursion tree:
 
-- **Leaf**: do the work, `return result, true, nil`. Emitted on the
-  results channel.
-- **Internal node**: call `spawn(child)` one or more times, `return
-  zero, false, nil`. Nothing emitted; children become new tree nodes.
-- **Fatal**: `return zero, false, err`. Aborts the whole pool; `Wait()`
-  reports it. Reserve this for real failures, not per-item conditions
-  (e.g. a permission-denied file mid-walk), fold those into `R` instead
-  and return them as a normal leaf result.
+- **Leaf**: do the work and emit the outcome onto `res`: `res <- result; return nil`.
+- **Internal node**: call `spawn(child...)` one or more times to enqueue child tasks: `spawn(child1, child2); return nil`.
+- **Fatal error**: `return err`. Aborts the whole pool; `Wait()` reports it. Reserve this for real failures, not per-item conditions (e.g. a permission-denied file mid-walk) — fold those into `R` instead and emit them as a normal leaf result.
 
 **`workerID`** is the index (`0..poolSize-1`) of the worker currently
 running this call. It identifies which worker's local state to use for
-task-local scratch space.  A scratch buffer, a symlink-cycle stack,
-anything you don't want shared/synchronized across workers. Index your
+task-local scratch space (a scratch buffer, a symlink-cycle stack,
+anything you don't want shared/synchronized across workers). Index your
 own `[]WorkerState` (sized `poolSize`, created alongside the pool) with
 it. It is **not** a call ID: the same `workerID` runs many `Task` calls
 over the pool's lifetime, sequentially, so state you key by it persists
@@ -70,15 +66,15 @@ interruptible.
 type primeRange struct{ Lo, Hi int }
 
 func countPrimesTask(threshold int) Task[primeRange, int] {
-    return func(ctx context.Context, workerID int, item primeRange, spawn func(primeRange)) (int, bool, error) {
+    return func(ctx context.Context, workerID int, item primeRange, res chan<- int, spawn func(...primeRange)) error {
         width := item.Hi - item.Lo
         if width <= threshold {
-            return countPrimesSequential(item.Lo, item.Hi), true, nil
+            res <- countPrimesSequential(item.Lo, item.Hi)
+            return nil
         }
         mid := item.Lo + width/2
-        spawn(primeRange{item.Lo, mid})
-        spawn(primeRange{mid, item.Hi})
-        return 0, false, nil
+        spawn(primeRange{item.Lo, mid}, primeRange{mid, item.Hi})
+        return nil
     }
 }
 
@@ -90,7 +86,7 @@ for count := range pool.Run() {
     total += count
 }
 if err := pool.Wait(); err != nil {
-    // handle
+    // handle error
 }
 ```
 
