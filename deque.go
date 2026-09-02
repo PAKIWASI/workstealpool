@@ -64,7 +64,9 @@ func (a *circularArray[T]) resizeCopy(newCap int, from, to int64) *circularArray
 //   - This race is resolved by a CAS by both the thief and the owner
 type LFdeque[T any] struct {
 	top    atomic.Int64
+	_      [56]byte      // each atomic is on it's own cache line
 	bottom atomic.Int64
+	_      [56]byte      // TODO: does this have any effect?
 	array  atomic.Pointer[circularArray[T]]
 }
 
