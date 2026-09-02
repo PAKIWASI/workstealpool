@@ -169,11 +169,6 @@ func (d *LFdeque[T]) PopBottom() (v T, ok bool) {
 // Steal removes and returns the value at the top (thief-safe: any number
 // of goroutines may call this concurrently, including concurrently with
 // the owner's PushBottom/PopBottom).
-//
-// KNOWN LIMITATION: the a.get(t) read below can race with a concurrent
-// PushBottom's array write under `go test -race`. This is expected and
-// does not affect correctness - see README.md, "Known limitation: benign
-// data race under -race", for the full explanation.
 func (d *LFdeque[T]) Steal() (v T, ok bool) {
 	t := d.top.Load()
 	b := d.bottom.Load()
@@ -184,20 +179,11 @@ func (d *LFdeque[T]) Steal() (v T, ok bool) {
 	}
 
 	a := d.array.Load()
-	// get the value BEFORE seeing if it's a valid steal.
-	// so that if the steal is valid, you already have the value and
-	// you don't potentially get another value written between your CAS
-	// and the a.get(). If steal is invalid, you just discard the value
-	v = a.get(t)
-
-	// if the top val incremented after we did the `t := d.top.Load()`, then
-	// the value `v` at index `t` that we just got is already taken by another thief
-	// or the owner's cas won it
 	if !d.top.CompareAndSwap(t, t+1) {
 		var zero T
 		return zero, false
 	}
-	return v, true
+	return a.get(t), true
 }
 
 // StealHalf removes approximately half of the victim's current work from
@@ -221,13 +207,11 @@ func (d *LFdeque[T]) StealHalf(scratch []T) (v []T, ok bool) {
 			break // nothing left to safely claim, per a fresh read
 		}
 
-		a := d.array.Load() // fresh, in case a resize swapped it in
-		val := a.get(curTop)
-
 		if !d.top.CompareAndSwap(curTop, curTop+1) {
 			break // lost the race — deque shrank or another thief/owner beat us here
 		}
-		buf = append(buf, val)
+		a := d.array.Load() // fresh, in case a resize swapped it in
+		buf = append(buf, a.get(curTop))
 	}
 
 	if len(buf) == 0 {
