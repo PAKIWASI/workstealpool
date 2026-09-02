@@ -134,10 +134,12 @@ func (p *WorkerPool[T, R]) SubmitN(items ...T) {
 	n := len(items)
 	if n == 0 {
 		p.cancel()
+		return
 	}
 	if n == 1 {
 		p.pending.Add(1)
 		p.workers[0].deque.PushBottom(items[0])
+		return
 	}
 	p.pending.Add(int64(n))
 	p.workers[0].deque.PushSliceBottom(items)

@@ -560,3 +560,52 @@ func TestLFdeque_PushSliceBottom(t *testing.T) {
 		t.Fatal("PopBottom() succeeded on empty deque")
 	}
 }
+
+func TestLFdeque_PushSliceBottom_Growth(t *testing.T) {
+	d := NewLFdeque[int](4) // starts at minCap (8)
+
+	// Push in several large slices to force multiple resizes
+	const total = 5000
+	var allItems []int
+	for i := 0; i < total; i += 250 {
+		var slice []int
+		for j := i; j < i+250; j++ {
+			slice = append(slice, j)
+			allItems = append(allItems, j)
+		}
+		d.PushSliceBottom(slice)
+	}
+
+	if got := d.Len(); got != total {
+		t.Fatalf("Len() = %d, want %d", got, total)
+	}
+
+	for i := len(allItems) - 1; i >= 0; i-- {
+		got, ok := d.PopBottom()
+		if !ok || got != allItems[i] {
+			t.Fatalf("PopBottom() = (%d, %v), want (%d, true)", got, ok, allItems[i])
+		}
+	}
+}
+
+func TestLFdeque_StealHalf_EmptyOrSingle(t *testing.T) {
+	d := NewLFdeque[int](8)
+	scratch := make([]int, 4)
+
+	// Empty
+	if vals, ok := d.StealHalf(scratch); ok || vals != nil {
+		t.Fatalf("StealHalf on empty = (%v, %v), want (nil, false)", vals, ok)
+	}
+
+	// Single item
+	d.PushBottom(42)
+	if vals, ok := d.StealHalf(scratch); ok || vals != nil {
+		t.Fatalf("StealHalf on single item = (%v, %v), want (nil, false)", vals, ok)
+	}
+
+	// Still readable by owner
+	if got, ok := d.PopBottom(); !ok || got != 42 {
+		t.Fatalf("PopBottom = (%d, %v), want (42, true)", got, ok)
+	}
+}
+
