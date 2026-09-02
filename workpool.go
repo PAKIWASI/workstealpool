@@ -55,7 +55,8 @@ func newWorker[T any](capacity int) Worker[T] {
 //   - ok == false: ( internal node ) the task only spawned children, nothing is emitted.
 //
 // T is the input type and R is the result type.
-type Task[T, R any] func(ctx context.Context, workerId int, item T, spawn func(...T)) (result R, ok bool, err error)
+// type Task[T, R any] func(ctx context.Context, workerId int, item T, spawn func(...T)) (result R, ok bool, err error)
+type Task[T, R any] func(ctx context.Context, workerId int, item T, res chan<- R, spawn func(...T)) error
 
 // WorkerPool manages a collection of workers and schedules work between them.
 //
@@ -130,6 +131,19 @@ func NewWorkerPool[T, R any](
 func (p *WorkerPool[T, R]) Submit(item T) {
 	p.pending.Add(1)
 	p.workers[0].deque.PushBottom(item)
+}
+
+func (p *WorkerPool[T, R]) SubmitN(items ...T) {
+	n := len(items)
+	if n == 0 {
+		p.cancel()
+	}
+	if n == 1 {
+		p.pending.Add(1)
+		p.workers[0].deque.PushBottom(items[0])
+	}
+	p.pending.Add(int64(n))
+	p.workers[0].deque.PushSliceBottom(items)
 }
 
 // Run: Result channel generator. Starts all workers and returns the results
@@ -246,16 +260,13 @@ func (p *WorkerPool[T, R]) broadcastWakeup() {
 
 // runTask implements the actual task execution of a worker.
 func (p *WorkerPool[T, R]) runTask(spawn func(...T), idx int, item T) error {
-	// pass workerID to the task function so users can have arbitrary extra state per worker
-	result, ok, err := p.execute(p.ctx, idx, item, spawn)
+
+	// Task func takes the results chan as write only channel. long running tasks should
+	// also check ctx.Done to stop. short tasks (few ms) don't need to do this as each worker's
+	// goroutine already checks for Done each loop before calling runTask
+	err := p.execute(p.ctx, idx, item, p.results, spawn)
 	if err != nil {
 		return err // errgroup records it and cancels egCtx for every worker
-	}
-	if ok {
-		select {
-		case p.results <- result:
-		case <-p.ctx.Done():
-		}
 	}
 
 	if p.pending.Add(-1) == 0 {
